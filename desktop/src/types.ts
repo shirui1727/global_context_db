@@ -15,8 +15,39 @@ export type MemorySummary = {
   id: string;
   content: string;
   tags: string[];
+  user_id?: string;
   agent_id?: string | null;
+  session_id?: string | null;
   conversation_id?: string | null;
+  memory_type?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type MemoryVersion = {
+  id: string;
+  memory_id: string;
+  content: string;
+  tags: string[];
+  user_id?: string | null;
+  agent_id?: string | null;
+  session_id?: string | null;
+  conversation_id?: string | null;
+  memory_type?: string | null;
+  metadata?: Record<string, unknown>;
+  changed_at?: string | null;
+  change_type: string;
+};
+
+export type AuditLog = {
+  id: string;
+  actor?: string | null;
+  action: string;
+  target_type?: string | null;
+  target_id?: string | null;
+  created_at?: string | null;
+  metadata?: Record<string, unknown>;
 };
 
 export type SearchResult = {
@@ -27,8 +58,12 @@ export type SearchResult = {
   doc_id?: string;
   chunk_index?: number;
   tags?: string[] | string;
+  user_id?: string | null;
   agent_id?: string | null;
+  session_id?: string | null;
   conversation_id?: string | null;
+  memory_type?: string | null;
+  metadata?: Record<string, unknown>;
   score?: number;
 };
 
@@ -44,6 +79,18 @@ export type IngestResponse = {
 
 export type AddMemoryResponse = {
   memory_id: string;
+  memory?: MemorySummary;
+  status?: "created" | "deduplicated";
+};
+
+export type UpdateMemoryResponse = {
+  memory_id: string;
+  memory: MemorySummary;
+};
+
+export type DeleteMemoryResponse = {
+  memory_id: string;
+  deleted: boolean;
 };
 
 export type CaptureSummary = {
@@ -165,9 +212,13 @@ export type DesktopAPI = {
   listDocuments: () => Promise<DocumentSummary[]>;
   listCaptures: () => Promise<CaptureSummary[]>;
   listMemories: () => Promise<MemorySummary[]>;
+  listMemoryVersions: (payload: { memoryId: string; limit?: number }) => Promise<MemoryVersion[]>;
+  listAuditLogs: (payload?: { limit?: number }) => Promise<AuditLog[]>;
   search: (payload: { query: string; topK: number }) => Promise<SearchResponse>;
   searchMemories: (payload: { query: string; topK: number }) => Promise<{ results: SearchResult[] }>;
   addMemory: (payload: { content: string; tags: string[] }) => Promise<AddMemoryResponse>;
+  updateMemory: (payload: { memoryId: string; content: string; tags: string[] }) => Promise<UpdateMemoryResponse>;
+  deleteMemory: (payload: { memoryId: string }) => Promise<DeleteMemoryResponse>;
   ingestText: (payload: { source: string; text: string }) => Promise<IngestResponse>;
   ingestUrl: (payload: { url: string; tags?: string[]; sourcePlatform?: string | null }) => Promise<UrlIngestResponse>;
   addFeed: (payload: { url: string; title?: string | null }) => Promise<FeedSummary>;

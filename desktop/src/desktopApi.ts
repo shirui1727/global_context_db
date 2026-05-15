@@ -14,7 +14,11 @@ const mockMemories = [
     content: "第一版采用本地优先，不要求普通用户安装 Docker。",
     tags: ["产品", "本地优先"],
     agent_id: null,
-    conversation_id: null
+    session_id: null,
+    conversation_id: null,
+    user_id: "default",
+    memory_type: "long_term",
+    metadata: {}
   }
 ];
 
@@ -32,7 +36,7 @@ const mockCaptures: CaptureSummary[] = [
     tags: ["web"],
     captured_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
-    status: "imported" as const,
+    status: "imported",
     error: null
   }
 ];
@@ -81,6 +85,12 @@ const mockAPI: DesktopAPI = {
   async listMemories() {
     return mockMemories;
   },
+  async listMemoryVersions() {
+    return [];
+  },
+  async listAuditLogs() {
+    return [];
+  },
   async search(payload) {
     return {
       query: payload.query,
@@ -88,7 +98,7 @@ const mockAPI: DesktopAPI = {
         {
           id: "mock-result-1",
           kind: "chunk",
-          text: "开发预览结果：真实桌面环境会从本地 FastAPI 和 LanceDB 返回搜索结果。",
+          text: `开发预览搜索：${payload.query}`,
           source: "开发预览",
           score: 0.91
         }
@@ -101,7 +111,7 @@ const mockAPI: DesktopAPI = {
         {
           id: "mock-memory-result-1",
           kind: "memory",
-          text: `开发预览记忆搜索：${payload.query}`,
+          text: `记忆搜索：${payload.query}`,
           score: 0.88
         }
       ]
@@ -114,9 +124,41 @@ const mockAPI: DesktopAPI = {
       content: payload.content,
       tags: payload.tags,
       agent_id: null,
-      conversation_id: null
+      session_id: null,
+      conversation_id: null,
+      user_id: "default",
+      memory_type: "long_term",
+      metadata: {}
     });
-    return { memory_id: id };
+    return { memory_id: id, memory: mockMemories[0], status: "created" };
+  },
+  async updateMemory(payload) {
+    const current = mockMemories.find((item) => item.id === payload.memoryId);
+    if (current) {
+      current.content = payload.content;
+      current.tags = payload.tags;
+    }
+    return {
+      memory_id: payload.memoryId,
+      memory: current ?? {
+        id: payload.memoryId,
+        content: payload.content,
+        tags: payload.tags,
+        user_id: "default",
+        agent_id: null,
+        session_id: null,
+        conversation_id: null,
+        memory_type: "long_term",
+        metadata: {}
+      }
+    };
+  },
+  async deleteMemory(payload) {
+    const index = mockMemories.findIndex((item) => item.id === payload.memoryId);
+    if (index >= 0) {
+      mockMemories.splice(index, 1);
+    }
+    return { memory_id: payload.memoryId, deleted: index >= 0 };
   },
   async ingestText(payload) {
     const id = `mock-doc-${Date.now()}`;
@@ -133,14 +175,14 @@ const mockAPI: DesktopAPI = {
     mockDocuments.unshift({
       id,
       source: title,
-      content_preview: "开发预览：这里会写入公开 URL 抓取到的正文。"
+      content_preview: "公开 URL 导入后的正文预览。"
     });
     mockCaptures.unshift({
       id: `mock-capture-${Date.now()}`,
       document_id: id,
       url: payload.url,
       title,
-      text_preview: "开发预览：公开 URL 导入后的正文预览。",
+      text_preview: "公开 URL 导入后的正文预览。",
       html_path: null,
       screenshot_path: null,
       source_platform: payload.sourcePlatform ?? "web",
