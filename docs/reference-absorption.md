@@ -64,6 +64,23 @@
 - 人工审核和知识条目
 - 冲突检查
 
+## opal-bridge
+
+`1va7/opal-bridge` 不是记忆库，而是跨 agent session 翻译和同步桥。它把 Claude Code、Codex CLI 等工具的会话格式转换成统一 canonical session format，用于双向转换、resume、同步和 MCP 暴露。
+
+吸收：
+
+- canonical session/event 层
+- 跨 agent 会话归档
+- 会话 resume 上下文生成
+- 原始 session 文件和统一事件分离保存
+
+暂不吸收：
+
+- 第一阶段不实现 session 翻译器
+- 不把聊天流水混进长期记忆表
+- 不做跨工具 resume 渲染
+
 ## 本项目第一阶段结论
 
-先做成一个干净、稳定、工具可连的 NAS 记忆服务。桌面、浏览器插件、MCP、OpenClaw 都是客户端。
+先做成一个干净、稳定、工具可连的 NAS 记忆服务。桌面、浏览器插件、MCP、OpenClaw 都是客户端。`opal-bridge` 的思想进入第二阶段：会话层/事件层。
