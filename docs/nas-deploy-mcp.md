@@ -35,7 +35,7 @@ curl http://NAS_IP:8000/health
 curl http://NAS_IP:8000/diagnostics
 ```
 
-正常情况下，`/health` 会返回服务名、版本、数据目录、SQLite 路径和 MCP 配置。`/diagnostics` 会返回记忆、文档、捕获、审计和失败摘要。
+正常情况下，`/health` 会返回服务名、版本、数据目录、SQLite 路径和 MCP 配置。治理版版本号应为 `0.1.2-governance` 或更高。`/diagnostics` 会返回记忆、文档、捕获、审计和失败摘要。
 
 ## MCP 地址
 

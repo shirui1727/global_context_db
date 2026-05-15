@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     embedding_dim: int = 64
     api_key: str | None = None
     service_name: str = "global-context-db"
-    service_version: str = "0.1.1-nas-update"
+    service_version: str = "0.1.2-governance"
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8001
     mcp_path: str = "/mcp"

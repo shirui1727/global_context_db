@@ -19,7 +19,7 @@ Global Context DB 是部署在 NAS 上的公共记忆库，用来给 Codex、Ope
 - Health: `http://NAS_IP:8000/health`
 - MCP: `http://NAS_IP:8001/mcp`
 
-`/health` 返回服务名、版本、数据目录、SQLite 路径和 MCP 配置。`/diagnostics` 返回统计、审计、失败摘要和重复候选。
+`/health` 返回服务名、版本、数据目录、SQLite 路径和 MCP 配置。治理版版本号应为 `0.1.2-governance` 或更高。`/diagnostics` 返回统计、审计、失败摘要和重复候选。
 
 ## MCP 工具名
 
