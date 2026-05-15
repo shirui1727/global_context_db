@@ -90,6 +90,7 @@ def health() -> dict:
     return {
         "ok": True,
         "service": settings.service_name,
+        "version": settings.service_version,
         "data_dir": str(settings.data_dir),
         "sqlite_path": str(settings.sqlite_path),
         "mcp": {
