@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 
@@ -12,6 +10,8 @@ from app.capture.service import (
     list_feeds,
     refresh_feed,
 )
+from app.core.auth import require_api_key
+from app.core.config import settings
 from app.core.schemas import (
     CrawlJobCreateRequest,
     FeedCreateRequest,
@@ -22,8 +22,6 @@ from app.core.schemas import (
     UrlIngestRequest,
     WebCaptureRequest,
 )
-from app.core.auth import require_api_key
-from app.core.config import settings
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
     add_memory,
@@ -76,7 +74,7 @@ def home() -> str:
         </div>
         <div class="grid">
           <div class="panel"><h2>MCP 接入</h2><p><code>__MCP_URL__</code> 给支持远程 MCP 的 AI 工具使用。</p></div>
-          <div class="panel"><h2>REST 健康检查</h2><p><code>/health</code> 返回服务名、数据目录和 MCP 配置。</p></div>
+          <div class="panel"><h2>REST 健康检查</h2><p><code>/health</code> 返回服务名、版本、数据目录和 MCP 配置。</p></div>
           <div class="panel"><h2>长期记忆</h2><p>支持写入、搜索、去重、版本历史和审计日志。</p></div>
           <div class="panel"><h2>桌面管理</h2><p>桌面端负责导入、检索、治理和连接 NAS 服务。</p></div>
         </div>
@@ -84,6 +82,7 @@ def home() -> str:
     </body>
     </html>
     """.replace("__MCP_URL__", mcp_url)
+
 
 @router.get("/health")
 def health() -> dict:
@@ -188,7 +187,7 @@ async def crawl_jobs_create(payload: CrawlJobCreateRequest) -> dict:
 def crawl_jobs_get(job_id: str) -> dict:
     job = get_crawl_job(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="任务不存在。")
+        raise HTTPException(status_code=404, detail="任务不存在")
     return job
 
 
@@ -203,7 +202,12 @@ def memories(payload: MemoryCreate) -> dict:
 
 
 @router.get("/memories")
-def memories_list(user_id: str | None = None, agent_id: str | None = None, memory_type: str | None = None, limit: int = 100) -> list[dict]:
+def memories_list(
+    user_id: str | None = None,
+    agent_id: str | None = None,
+    memory_type: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
     return list_memories(user_id=user_id, agent_id=agent_id, memory_type=memory_type, limit=limit)
 
 
