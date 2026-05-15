@@ -7,6 +7,7 @@ services:
       GCD_DATA_DIR: /data
       GCD_SQLITE_PATH: /data/gcd_v2.sqlite3
       GCD_LANCEDB_DIR: /data/lancedb_v2
+      GCD_SERVICE_VERSION: 0.1.2-governance
     volumes:
       - gcd-data:/data
     healthcheck:
@@ -24,6 +25,7 @@ services:
       GCD_DATA_DIR: /data
       GCD_SQLITE_PATH: /data/gcd_v2.sqlite3
       GCD_LANCEDB_DIR: /data/lancedb_v2
+      GCD_SERVICE_VERSION: 0.1.2-governance
       GCD_MCP_HOST: 0.0.0.0
       GCD_MCP_PORT: 8001
       GCD_MCP_PATH: /mcp
