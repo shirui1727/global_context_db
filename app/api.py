@@ -23,6 +23,7 @@ from app.core.schemas import (
     WebCaptureRequest,
 )
 from app.core.auth import require_api_key
+from app.core.config import settings
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
     add_memory,
@@ -41,6 +42,7 @@ router = APIRouter()
 
 @router.get("/", response_class=HTMLResponse)
 def home() -> str:
+    mcp_url = f"http://NAS_IP:{settings.mcp_port}{settings.mcp_path}"
     return """
     <!doctype html>
     <html lang="zh-CN">
@@ -69,23 +71,33 @@ def home() -> str:
       <div class="wrap">
         <div class="hero">
           <h1>Global Context DB</h1>
-          <p class="status"><span class="dot"></span>?????</p>
-          <p>????? NAS ???? AI ????AI ?????? MCP ??????????? REST ???</p>
+          <p class="status"><span class="dot"></span>服务运行中</p>
+          <p>这是 NAS 公共记忆库后端。Codex、OpenClaw 等 AI 工具通过 MCP 或 REST 接入，不直接操作数据库文件。</p>
         </div>
         <div class="grid">
-          <div class="panel"><h2>MCP ??</h2><p><code>/mcp</code> ?? Codex?OpenClaw ? AI ?????</p></div>
-          <div class="panel"><h2>REST ????</h2><p><code>/health</code> ?? <code>{"ok": true}</code> ???????</p></div>
-          <div class="panel"><h2>????</h2><p>?????????????????????????????????</p></div>
-          <div class="panel"><h2>????</h2><p>???????????????????? MCP ? REST ???</p></div>
+          <div class="panel"><h2>MCP 接入</h2><p><code>__MCP_URL__</code> 给支持远程 MCP 的 AI 工具使用。</p></div>
+          <div class="panel"><h2>REST 健康检查</h2><p><code>/health</code> 返回服务名、数据目录和 MCP 配置。</p></div>
+          <div class="panel"><h2>长期记忆</h2><p>支持写入、搜索、去重、版本历史和审计日志。</p></div>
+          <div class="panel"><h2>桌面管理</h2><p>桌面端负责导入、检索、治理和连接 NAS 服务。</p></div>
         </div>
       </div>
     </body>
     </html>
-    """
+    """.replace("__MCP_URL__", mcp_url)
 
 @router.get("/health")
 def health() -> dict:
-    return {"ok": True}
+    return {
+        "ok": True,
+        "service": settings.service_name,
+        "data_dir": str(settings.data_dir),
+        "sqlite_path": str(settings.sqlite_path),
+        "mcp": {
+            "host": settings.mcp_host,
+            "port": settings.mcp_port,
+            "path": settings.mcp_path,
+        },
+    }
 
 
 @router.post("/documents/ingest")
