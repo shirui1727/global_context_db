@@ -4,8 +4,47 @@ import json
 
 from app.core.schemas import MemoryCreate, MemoryUpdate
 from app.retrieval.embedding import embed_text
-from app.storage.repo import memories_repo
+from app.storage.repo import audit_logs_repo, memories_repo, memory_versions_repo
 from app.storage.vector_store import delete_item, search_items, upsert_items
+
+
+def _actor(agent_id: str | None, user_id: str | None) -> str:
+    return agent_id or user_id or "unknown"
+
+
+def _audit(action: str, target_id: str, actor: str, metadata: dict | None = None) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    audit_logs_repo().insert(
+        {
+            "id": sha256(f"{now}:{actor}:{action}:{target_id}".encode("utf-8")).hexdigest(),
+            "actor": actor,
+            "action": action,
+            "target_type": "memory",
+            "target_id": target_id,
+            "created_at": now,
+            "metadata": metadata or {},
+        }
+    )
+
+
+def _version(memory_id: str, row: dict, change_type: str) -> None:
+    changed_at = datetime.now(timezone.utc).isoformat()
+    memory_versions_repo().insert(
+        {
+            "id": sha256(f"{changed_at}:{change_type}:{memory_id}".encode("utf-8")).hexdigest(),
+            "memory_id": memory_id,
+            "content": row.get("content"),
+            "tags": row.get("tags", []),
+            "user_id": row.get("user_id"),
+            "agent_id": row.get("agent_id"),
+            "session_id": row.get("session_id"),
+            "conversation_id": row.get("conversation_id"),
+            "memory_type": row.get("memory_type"),
+            "metadata": row.get("metadata", {}),
+            "changed_at": changed_at,
+            "change_type": change_type,
+        }
+    )
 
 
 def add_memory(payload: MemoryCreate) -> dict:
@@ -35,7 +74,18 @@ def add_memory(payload: MemoryCreate) -> dict:
         "created_at": now,
         "updated_at": now,
     }
+    existing = memories_repo().get(memory_id)
+    if existing is not None:
+        _audit(
+            "memory.deduplicated",
+            memory_id,
+            _actor(payload.agent_id, payload.user_id),
+            {"reason": "same scoped content already exists"},
+        )
+        return {"memory_id": memory_id, "memory": existing, "status": "deduplicated"}
     memories_repo().upsert(row)
+    _version(memory_id, row, "created")
+    _audit("memory.created", memory_id, _actor(payload.agent_id, payload.user_id))
     upsert_items(
         [
             {
@@ -53,7 +103,7 @@ def add_memory(payload: MemoryCreate) -> dict:
             }
         ]
     )
-    return {"memory_id": memory_id, "memory": memories_repo().get(memory_id)}
+    return {"memory_id": memory_id, "memory": memories_repo().get(memory_id), "status": "created"}
 
 
 def _decode_metadata(value: object) -> object:
@@ -112,7 +162,10 @@ def update_memory(memory_id: str, payload: MemoryUpdate) -> dict:
         **{k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None},
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    _version(memory_id, current, "before_update")
     memories_repo().upsert(updated)
+    _version(memory_id, updated, "updated")
+    _audit("memory.updated", memory_id, _actor(updated.get("agent_id"), updated.get("user_id")))
     delete_item(memory_id)
     upsert_items(
         [
@@ -135,6 +188,18 @@ def update_memory(memory_id: str, payload: MemoryUpdate) -> dict:
 
 
 def delete_memory(memory_id: str) -> dict:
+    current = memories_repo().get(memory_id)
     existed = memories_repo().delete(memory_id)
+    if current is not None:
+        _version(memory_id, current, "deleted")
+        _audit("memory.deleted", memory_id, _actor(current.get("agent_id"), current.get("user_id")))
     delete_item(memory_id)
     return {"deleted": existed, "memory_id": memory_id}
+
+
+def list_memory_versions(memory_id: str, limit: int = 20) -> list[dict]:
+    return memory_versions_repo().list_by_memory(memory_id, limit)
+
+
+def list_audit_logs(limit: int = 100) -> list[dict]:
+    return audit_logs_repo().list_recent(limit)

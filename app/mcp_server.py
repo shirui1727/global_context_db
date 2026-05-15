@@ -5,7 +5,15 @@ from mcp.server.fastmcp import FastMCP
 from app.core.config import settings
 from app.core.schemas import IngestRequest, MemoryCreate, MemoryUpdate
 from app.ingest.pipeline import ingest_text
-from app.memory.service import add_memory, delete_memory, list_memories, search_memory, update_memory
+from app.memory.service import (
+    add_memory,
+    delete_memory,
+    list_audit_logs,
+    list_memories,
+    list_memory_versions,
+    search_memory,
+    update_memory,
+)
 from app.retrieval.service import search_context
 from app.storage.bootstrap import bootstrap
 
@@ -23,6 +31,14 @@ def configure_http_transport() -> None:
     mcp.settings.port = settings.mcp_port
     mcp.settings.streamable_http_path = settings.mcp_path
     mcp.settings.transport_security = None
+
+
+def require_mcp_write_key(api_key: str | None = None) -> None:
+    if not settings.require_mcp_api_key:
+        return
+    if settings.api_key and api_key == settings.api_key:
+        return
+    raise ValueError("invalid or missing MCP API key")
 
 
 @mcp.tool()
@@ -46,9 +62,11 @@ def gcd_add_memory(
     conversation_id: str | None = None,
     memory_type: str = "long_term",
     metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """Store a durable memory for later recall."""
     bootstrap(settings)
+    require_mcp_write_key(api_key)
     return add_memory(
         MemoryCreate(
             content=content,
@@ -89,6 +107,20 @@ def gcd_list_memories(
 
 
 @mcp.tool()
+def gcd_list_memory_versions(memory_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    """List version history for a memory."""
+    bootstrap(settings)
+    return list_memory_versions(memory_id, limit)
+
+
+@mcp.tool()
+def gcd_list_audit_logs(limit: int = 100) -> list[dict[str, Any]]:
+    """List recent audit logs for memory changes."""
+    bootstrap(settings)
+    return list_audit_logs(limit)
+
+
+@mcp.tool()
 def gcd_update_memory(
     memory_id: str,
     content: str | None = None,
@@ -99,9 +131,11 @@ def gcd_update_memory(
     conversation_id: str | None = None,
     memory_type: str | None = None,
     metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """Update a stored memory."""
     bootstrap(settings)
+    require_mcp_write_key(api_key)
     return update_memory(
         memory_id,
         MemoryUpdate(
@@ -118,16 +152,18 @@ def gcd_update_memory(
 
 
 @mcp.tool()
-def gcd_delete_memory(memory_id: str) -> dict[str, Any]:
+def gcd_delete_memory(memory_id: str, api_key: str | None = None) -> dict[str, Any]:
     """Delete a stored memory."""
     bootstrap(settings)
+    require_mcp_write_key(api_key)
     return delete_memory(memory_id)
 
 
 @mcp.tool()
-def gcd_ingest_text(source: str, text: str) -> dict[str, Any]:
+def gcd_ingest_text(source: str, text: str, api_key: str | None = None) -> dict[str, Any]:
     """Ingest a text document into the shared context database."""
     bootstrap(settings)
+    require_mcp_write_key(api_key)
     return ingest_text(IngestRequest(source=source, text=text))
 
 

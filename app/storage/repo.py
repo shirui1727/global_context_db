@@ -35,6 +35,37 @@ def init_sqlite(path: Path) -> None:
     )
     conn.execute(
         """
+        create table if not exists memory_versions (
+            id text primary key,
+            memory_id text,
+            content text,
+            tags text,
+            user_id text,
+            agent_id text,
+            session_id text,
+            conversation_id text,
+            memory_type text,
+            metadata text,
+            changed_at text,
+            change_type text
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists audit_logs (
+            id text primary key,
+            actor text,
+            action text,
+            target_type text,
+            target_id text,
+            created_at text,
+            metadata text
+        )
+        """
+    )
+    conn.execute(
+        """
         create table if not exists captures (
             id text primary key,
             document_id text,
@@ -242,6 +273,108 @@ class MemoriesRepo:
             "created_at": row[9],
             "updated_at": row[10],
         }
+
+
+class MemoryVersionsRepo:
+    def insert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into memory_versions(
+                    id, memory_id, content, tags, user_id, agent_id, session_id,
+                    conversation_id, memory_type, metadata, changed_at, change_type
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row["memory_id"],
+                    row.get("content"),
+                    ",".join(row.get("tags", [])),
+                    row.get("user_id"),
+                    row.get("agent_id"),
+                    row.get("session_id"),
+                    row.get("conversation_id"),
+                    row.get("memory_type"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                    row.get("changed_at"),
+                    row.get("change_type"),
+                ),
+            )
+
+    def list_by_memory(self, memory_id: str, limit: int = 20) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, memory_id, content, tags, user_id, agent_id, session_id,
+                       conversation_id, memory_type, metadata, changed_at, change_type
+                from memory_versions
+                where memory_id = ?
+                order by rowid desc
+                limit ?
+                """,
+                (memory_id, limit),
+            ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "memory_id": r[1],
+                "content": r[2],
+                "tags": [t for t in (r[3] or "").split(",") if t],
+                "user_id": r[4],
+                "agent_id": r[5],
+                "session_id": r[6],
+                "conversation_id": r[7],
+                "memory_type": r[8],
+                "metadata": json.loads(r[9] or "{}"),
+                "changed_at": r[10],
+                "change_type": r[11],
+            }
+            for r in rows
+        ]
+
+
+class AuditLogsRepo:
+    def insert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into audit_logs(id, actor, action, target_type, target_id, created_at, metadata)
+                values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row.get("actor"),
+                    row.get("action"),
+                    row.get("target_type"),
+                    row.get("target_id"),
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def list_recent(self, limit: int = 100) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, actor, action, target_type, target_id, created_at, metadata
+                from audit_logs
+                order by rowid desc
+                limit ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "actor": r[1],
+                "action": r[2],
+                "target_type": r[3],
+                "target_id": r[4],
+                "created_at": r[5],
+                "metadata": json.loads(r[6] or "{}"),
+            }
+            for r in rows
+        ]
 
 
 class CapturesRepo:
@@ -510,6 +643,14 @@ def chunks_repo() -> ChunksRepo:
 
 def memories_repo() -> MemoriesRepo:
     return MemoriesRepo()
+
+
+def memory_versions_repo() -> MemoryVersionsRepo:
+    return MemoryVersionsRepo()
+
+
+def audit_logs_repo() -> AuditLogsRepo:
+    return AuditLogsRepo()
 
 
 def captures_repo() -> CapturesRepo:

@@ -54,6 +54,16 @@ REST 接口保留给桌面、浏览器插件、后台管理和调试：
 - `GET /memories/search`
 - `PATCH /memories/{id}`
 - `DELETE /memories/{id}`
+- `GET /memories/{id}/versions`
+- `GET /audit-logs`
+
+## 轻量治理
+
+第一版治理能力包括：
+
+- 重复记忆写入会返回 `deduplicated`，避免多工具反复灌入相同内容。
+- 记忆创建、更新、删除会写入审计日志。
+- 记忆更新和删除会保留版本记录，方便回溯。
 
 ## 说明
 

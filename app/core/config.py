@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8001
     mcp_path: str = "/mcp"
+    require_mcp_api_key: bool = False
 
     class Config:
         env_prefix = "GCD_"

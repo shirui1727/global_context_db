@@ -40,11 +40,47 @@ def _table_obj():
 
 
 def _normalize_row(row: dict) -> dict:
-    normalized = dict(row)
+    normalized = {
+        "id": "",
+        "kind": "",
+        "text": "",
+        "vector": [0.0] * 64,
+        "source": "",
+        "doc_id": "",
+        "chunk_index": 0,
+        "tags": "",
+        "user_id": "",
+        "agent_id": "",
+        "session_id": "",
+        "conversation_id": "",
+        "memory_type": "",
+        "metadata": "{}",
+        **row,
+    }
     if isinstance(normalized.get("tags"), list):
         normalized["tags"] = ",".join(str(item) for item in normalized["tags"] if item is not None)
     if isinstance(normalized.get("metadata"), (dict, list)):
         normalized["metadata"] = json.dumps(normalized["metadata"], ensure_ascii=False)
+    for key in (
+        "id",
+        "kind",
+        "text",
+        "source",
+        "doc_id",
+        "tags",
+        "user_id",
+        "agent_id",
+        "session_id",
+        "conversation_id",
+        "memory_type",
+        "metadata",
+    ):
+        if normalized.get(key) is None:
+            normalized[key] = ""
+        else:
+            normalized[key] = str(normalized[key])
+    if normalized.get("chunk_index") is None:
+        normalized["chunk_index"] = 0
     return normalized
 
 
