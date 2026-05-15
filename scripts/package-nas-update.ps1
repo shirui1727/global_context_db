@@ -11,11 +11,11 @@ if (-not $OutputDir) {
 
 $YamlPath = Join-Path $RepoRoot "docker-compose.yaml"
 $YmlPath = Join-Path $RepoRoot "docker-compose.yml"
-if (Test-Path $YamlPath) {
-    throw "Do not ship docker-compose.yaml. NAS deploys must use docker-compose.yml only."
+if (Test-Path $YmlPath) {
+    throw "Do not ship docker-compose.yml. This NAS project uses docker-compose.yaml only."
 }
-if (-not (Test-Path $YmlPath)) {
-    throw "Missing docker-compose.yml."
+if (-not (Test-Path $YamlPath)) {
+    throw "Missing docker-compose.yaml."
 }
 
 $OutputDir = [System.IO.Path]::GetFullPath($OutputDir)
@@ -38,7 +38,7 @@ $Items = @(
     "app",
     "desktop\extension",
     "docs",
-    "docker-compose.yml",
+    "docker-compose.yaml",
     "Dockerfile",
     "pyproject.toml",
     "README.md"
@@ -76,7 +76,7 @@ try {
         $_.FullName -like "global_context_db/data/*" -or
         $_.FullName -like "global_context_db/.git/*" -or
         $_.FullName -like "*node_modules*" -or
-        $_.FullName -like "*docker-compose.yaml"
+        $_.FullName -like "*docker-compose.yml"
     }
     if ($BadEntries) {
         $Names = ($BadEntries | Select-Object -First 10 -ExpandProperty FullName) -join ", "
@@ -86,7 +86,7 @@ try {
     $RequiredEntries = @(
         "global_context_db/app/api.py",
         "global_context_db/app/core/config.py",
-        "global_context_db/docker-compose.yml"
+        "global_context_db/docker-compose.yaml"
     )
     foreach ($Required in $RequiredEntries) {
         if (-not ($Entries | Where-Object { $_.FullName -replace "\\", "/" -eq $Required })) {

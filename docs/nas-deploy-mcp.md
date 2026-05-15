@@ -10,10 +10,10 @@
 NAS Docker 项目只使用：
 
 ```text
-docker-compose.yml
+docker-compose.yaml
 ```
 
-不要保留 `docker-compose.yaml`。如果目录里同时存在 `.yml` 和 `.yaml`，NAS GUI 可能继续读取旧文件，导致更新没有生效。
+不要保留 `docker-compose.yml`。如果目录里同时存在 `.yml` 和 `.yaml`，NAS GUI 可能继续读取旧文件，导致更新没有生效。
 
 ## 启动
 
@@ -23,7 +23,7 @@ docker-compose.yml
 docker compose up -d --build
 ```
 
-如果使用 NAS 图形界面，项目路径应指向 `global_context_db/docker-compose.yml`。
+如果使用 NAS 图形界面，项目路径应指向 `global_context_db/docker-compose.yaml`。
 
 ## 检查 REST
 

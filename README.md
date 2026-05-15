@@ -58,10 +58,10 @@ docker compose up -d --build
 NAS 项目只保留一个部署文件：
 
 ```text
-docker-compose.yml
+docker-compose.yaml
 ```
 
-不要再创建或保留 `docker-compose.yaml`，避免 NAS Docker GUI 读取错文件。
+不要再创建或保留 `docker-compose.yml`，避免 NAS Docker GUI 读取错文件。
 
 ## 手动快照
 
@@ -100,7 +100,7 @@ S:\项目开发\全局数据库\release\global_context_db.zip
 - `data`
 - `.git`
 - `node_modules`
-- `docker-compose.yaml`
+- `docker-compose.yml`
 
 ## 桌面端
 
