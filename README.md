@@ -1,32 +1,39 @@
 # Global Context DB
 
-一个部署在 NAS 上的公共记忆库，给 Codex、OpenClaw、Claude Code 这类工具共享长期记忆、文档和采集内容。
+Global Context DB 是一个部署在 NAS 上的公共记忆库，给 Codex、OpenClaw、Claude Code 这类 AI 工具共享长期记忆、文档和上下文。
 
-## 现在能做什么
+它不是普通笔记软件，核心目标是：让多个 AI 工具通过 MCP / REST 访问同一个长期记忆载体。
 
-- `/memories`：写入、查询、更新、删除长期记忆
-- `/documents`：导入文本文件或公开 URL
-- `/captures`：保存网页采集记录
-- `/feeds`：手动管理 RSS 源
-- `/audit-logs`：查看记忆操作审计
-- `/memories/{id}/versions`：查看记忆版本历史
-- `desktop/`：桌面管理壳，负责连接、采集、搜索、治理
+## 当前能力
 
-## 运行方式
+- 长期记忆：写入、查询、更新、删除、去重
+- 文档入库：文本、文件、公开 URL
+- 资料采集：网页剪藏、RSS、批量 URL
+- 治理能力：审计日志、记忆版本历史、误删保护
+- NAS 接入：Docker 部署，远程 MCP 地址
+- 桌面管理：连接设置、测试连接、搜索、记忆管理、治理查看
 
-### 本地
+## 关键地址
+
+- REST: `http://NAS_IP:8000`
+- Health: `http://NAS_IP:8000/health`
+- MCP: `http://NAS_IP:8001/mcp`
+
+`/health` 会返回服务名、数据目录、SQLite 路径和 MCP 配置，方便确认桌面端或 AI 工具是否连到了正确的 NAS 服务。
+
+## 本地运行
 
 ```bash
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-### Docker
+## NAS / Docker 运行
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
 
-### 桌面端
+## 桌面端
 
 ```bash
 cd desktop
@@ -34,15 +41,18 @@ npm install
 npm run dev
 ```
 
+打开桌面端后，在 Settings 里切换到 NAS 地址，例如：
+
+```text
+http://192.168.10.5:8000
+```
+
+然后点击“测试连接”，确认服务名、数据目录和 MCP 地址显示正确。
+
 ## 设计原则
 
-- 本地优先，默认不要求普通用户安装 Docker
-- NAS 作为公共数据层
-- 访问和管理交给 Codex、OpenClaw 等工具
-- 数据要可追溯、可去重、可恢复
-
-## 下一步
-
-- 记忆去重策略继续细化
-- 桌面端增加更完整的治理页面
-- 预留会话归档和跨工具恢复能力
+- NAS 是公共数据层
+- MCP 是 AI 工具优先入口
+- REST 是管理、调试和桌面端入口
+- 外部工具不要直接操作数据库文件
+- 长期记忆和完整会话流水分层处理
