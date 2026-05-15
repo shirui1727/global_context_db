@@ -12,6 +12,24 @@ export type DesktopSettings = {
   autoStartLocalBackend: boolean;
 };
 
+export type HealthInfo = {
+  ok: boolean;
+  service?: string;
+  data_dir?: string;
+  sqlite_path?: string;
+  mcp?: {
+    host: string;
+    port: number;
+    path: string;
+  };
+};
+
+export type ConnectionTestResult = {
+  ok: boolean;
+  message: string;
+  health?: HealthInfo;
+};
+
 export type DocumentSummary = {
   id: string;
   source: string;
@@ -212,12 +230,13 @@ export type FolderImportResult = {
 export type DesktopAPI = {
   getSettings: () => Promise<DesktopSettings>;
   saveSettings: (payload: DesktopSettings) => Promise<DesktopSettings>;
+  testConnection: () => Promise<ConnectionTestResult>;
   getBackendStatus: () => Promise<BackendStatus>;
   openBackendDashboard: () => Promise<boolean>;
   openExternalUrl: (payload: { url: string }) => Promise<boolean>;
   chooseDocumentFile: () => Promise<string | null>;
   chooseDocumentFolder: () => Promise<string | null>;
-  health: () => Promise<{ ok: boolean }>;
+  health: () => Promise<HealthInfo>;
   listDocuments: () => Promise<DocumentSummary[]>;
   listCaptures: () => Promise<CaptureSummary[]>;
   listMemories: () => Promise<MemorySummary[]>;

@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 const desktopAPI = {
   getSettings: () => ipcRenderer.invoke("gcd:get-settings"),
   saveSettings: (payload) => ipcRenderer.invoke("gcd:save-settings", payload),
+  testConnection: () => ipcRenderer.invoke("gcd:test-connection"),
   getBackendStatus: () => ipcRenderer.invoke("gcd:get-backend-status"),
   openBackendDashboard: () => ipcRenderer.invoke("gcd:open-backend-dashboard"),
   openExternalUrl: (payload) => ipcRenderer.invoke("gcd:open-external-url", payload),

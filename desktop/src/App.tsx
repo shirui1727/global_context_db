@@ -13,7 +13,8 @@ import type {
   MemorySummary,
   MemoryVersion,
   SearchResult,
-  DesktopSettings
+  DesktopSettings,
+  HealthInfo
 } from "./types";
 
 type ViewKey = "overview" | "capture" | "documents" | "memory" | "governance" | "settings";
@@ -91,6 +92,7 @@ export default function App() {
   const [folderScan, setFolderScan] = useState<FolderScanResult | null>(null);
   const [folderImport, setFolderImport] = useState<FolderImportResult | null>(null);
   const [settings, setSettings] = useState<DesktopSettings>(initialSettings);
+  const [healthInfo, setHealthInfo] = useState<HealthInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
 
@@ -133,6 +135,21 @@ export default function App() {
       showToast("连接配置已保存", "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "保存配置失败", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testDesktopConnection = async () => {
+    setLoading(true);
+    try {
+      const result = await api.testConnection();
+      setHealthInfo(result.health ?? null);
+      const backendStatus = await api.getBackendStatus();
+      setStatus(backendStatus);
+      showToast(result.message, result.ok ? "success" : "error");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "连接测试失败", "error");
     } finally {
       setLoading(false);
     }
@@ -721,10 +738,21 @@ export default function App() {
                 保存并重连
               </button>
             </div>
+            <button className="secondary-button" type="button" disabled={loading} onClick={() => void testDesktopConnection()}>
+              测试连接
+            </button>
           </div>
           <div className="item-list">
             <InfoCard title="当前连接" description={status.message} extra={status.url} />
             <InfoCard title="MCP 地址" description="给 Codex、OpenClaw 等工具使用" extra={settings.backendUrl.replace(/:8000\/?$/, ":8001/mcp")} />
+            {healthInfo ? (
+              <div className="health-grid">
+                <Metric label="服务" value={healthInfo.service || "unknown"} />
+                <Metric label="数据目录" value={healthInfo.data_dir || "-"} />
+                <Metric label="SQLite" value={healthInfo.sqlite_path || "-"} />
+                <Metric label="MCP" value={healthInfo.mcp ? `${healthInfo.mcp.host}:${healthInfo.mcp.port}${healthInfo.mcp.path}` : "-"} />
+              </div>
+            ) : null}
           </div>
         </>
       );

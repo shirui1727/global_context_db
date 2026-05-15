@@ -64,6 +64,19 @@ const mockAPI: DesktopAPI = {
   async saveSettings(payload) {
     return payload;
   },
+  async testConnection() {
+    return {
+      ok: true,
+      message: "开发预览连接正常",
+      health: {
+        ok: true,
+        service: "global-context-db",
+        data_dir: "data",
+        sqlite_path: "data/gcd_v2.sqlite3",
+        mcp: { host: "127.0.0.1", port: 8001, path: "/mcp" }
+      }
+    };
+  },
   async getBackendStatus() {
     return {
       url: "http://127.0.0.1:8000",

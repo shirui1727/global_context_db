@@ -236,6 +236,30 @@ async function checkBackend() {
   }
 }
 
+async function testConnection() {
+  try {
+    const response = await fetch(backendUrl("/health"), { headers: backendHeaders() });
+    const text = await response.text();
+    let body = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch (_error) {
+      body = text;
+    }
+    if (!response.ok) {
+      return { ok: false, message: `连接失败：HTTP ${response.status}` };
+    }
+    updateBackendStatus({ running: true, ownedByApp: false, message: "连接测试通过。" });
+    return { ok: true, message: "连接测试通过", health: body };
+  } catch (error) {
+    updateBackendStatus({ running: false, ownedByApp: false, message: "连接测试失败。" });
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "连接测试失败"
+    };
+  }
+}
+
 function startBackend() {
   if (backendProcess || !isLocalManageableBackend()) return;
   const python = process.env.PYTHON || "python";
@@ -344,6 +368,7 @@ function registerIpcHandlers() {
     void ensureBackend();
     return saved;
   });
+  ipcMain.handle("gcd:test-connection", async () => testConnection());
   ipcMain.handle("gcd:get-backend-status", async () => {
     const running = await checkBackend();
     updateBackendStatus({ running, message: running ? "服务运行中。" : "服务未连接。" });
