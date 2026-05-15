@@ -66,6 +66,19 @@ function scoreLabel(score?: number) {
   return typeof score === "number" ? `${Math.round(score * 100)}%` : "未评分";
 }
 
+function deriveMcpUrl(backendUrl: string) {
+  try {
+    const url = new URL(backendUrl);
+    url.port = "8001";
+    url.pathname = "/mcp";
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch (_error) {
+    return backendUrl.replace(/:8000\/?$/, ":8001/mcp");
+  }
+}
+
 export default function App() {
   const api = useMemo(() => getDesktopAPI(), []);
   const [view, setView] = useState<ViewKey>("overview");
@@ -79,6 +92,7 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [selected, setSelected] = useState<SelectedItem>(null);
   const [memoryEditor, setMemoryEditor] = useState<MemoryEditorState | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [urlInput, setUrlInput] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
@@ -185,6 +199,7 @@ export default function App() {
     });
     const [versionRows] = await Promise.all([api.listMemoryVersions({ memoryId, limit: 20 })]);
     setVersions(versionRows);
+    setDeleteConfirmId(null);
     setSelected(current);
     setView("memory");
   };
@@ -313,10 +328,16 @@ export default function App() {
 
   const deleteMemory = async () => {
     if (!memoryEditor) return;
+    if (deleteConfirmId !== memoryEditor.id) {
+      setDeleteConfirmId(memoryEditor.id);
+      showToast("再次点击删除才会真正删除这条记忆", "info");
+      return;
+    }
     setLoading(true);
     try {
       await api.deleteMemory({ memoryId: memoryEditor.id });
       setMemoryEditor(null);
+      setDeleteConfirmId(null);
       setVersions([]);
       await refreshAll();
       showToast("记忆已删除", "success");
@@ -477,6 +498,7 @@ export default function App() {
             onMemoryTagsChange={(value) => setMemoryEditor((current) => (current ? { ...current, tags: value } : current))}
             onUpdateMemory={() => void updateMemory()}
             onDeleteMemory={() => void deleteMemory()}
+            deleteConfirmActive={deleteConfirmId === memoryEditor?.id}
             onOpenSelectedUrl={() => {
               if (selected && "url" in selected) {
                 void api.openExternalUrl({ url: selected.url });
@@ -744,7 +766,7 @@ export default function App() {
           </div>
           <div className="item-list">
             <InfoCard title="当前连接" description={status.message} extra={status.url} />
-            <InfoCard title="MCP 地址" description="给 Codex、OpenClaw 等工具使用" extra={settings.backendUrl.replace(/:8000\/?$/, ":8001/mcp")} />
+            <InfoCard title="MCP 地址" description="给 Codex、OpenClaw 等工具使用" extra={deriveMcpUrl(settings.backendUrl)} />
             {healthInfo ? (
               <div className="health-grid">
                 <Metric label="服务" value={healthInfo.service || "unknown"} />
@@ -930,6 +952,7 @@ function DetailPanel(props: {
   onMemoryTagsChange: (value: string) => void;
   onUpdateMemory: () => void;
   onDeleteMemory: () => void;
+  deleteConfirmActive: boolean;
   onOpenSelectedUrl: () => void;
   versions: MemoryVersion[];
 }) {
@@ -1018,7 +1041,7 @@ function DetailPanel(props: {
               更新
             </button>
             <button className="ghost-button" type="button" onClick={props.onDeleteMemory}>
-              删除
+              {props.deleteConfirmActive ? "确认删除" : "删除"}
             </button>
           </div>
           <div className="version-list">
