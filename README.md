@@ -1,15 +1,15 @@
 # Global Context DB
 
-Global Context DB 是一个部署在 NAS 上的公共记忆库，用来给 Codex、OpenClaw、Claude Code 这类 AI 工具共享长期记忆、文档和上下文。
+Global Context DB 是部署在 NAS 上的公共记忆库，用来给 Codex、OpenClaw、Claude Code、桌面端和浏览器插件共享长期记忆与上下文。
 
-它不是普通笔记软件。核心目标是：让多个 AI 工具通过 MCP / REST 访问同一个长期记忆载体，而不是各自保存一份孤立上下文。
+它不是普通笔记软件。核心目标是：多个 AI 工具通过同一个后端访问长期记忆、文档和采集内容，而不是各自保存一份孤立上下文。
 
 ## 当前能力
 
 - 长期记忆：写入、查询、更新、删除、去重。
 - 文档入库：文本、文件、公开 URL。
 - 资料采集：网页剪藏、RSS、批量 URL。
-- 治理能力：审计日志、记忆版本历史、误删保护。
+- 治理能力：审计日志、版本历史、诊断统计、误删保护。
 - NAS 接入：Docker 部署，远程 MCP 地址。
 - 桌面管理：连接设置、测试连接、搜索、记忆管理、治理查看。
 
@@ -19,7 +19,29 @@ Global Context DB 是一个部署在 NAS 上的公共记忆库，用来给 Codex
 - Health: `http://NAS_IP:8000/health`
 - MCP: `http://NAS_IP:8001/mcp`
 
-`/health` 会返回服务名、版本、数据目录、SQLite 路径和 MCP 配置。更新 NAS 后，先看这里确认是否跑到新版。
+`/health` 返回服务名、版本、数据目录、SQLite 路径和 MCP 配置。`/diagnostics` 返回统计、审计、失败摘要和重复候选。
+
+## MCP 工具名
+
+主工具名使用 `gcd_*` 前缀：
+
+- `gcd_add_memory`
+- `gcd_search_memories`
+- `gcd_list_memories`
+- `gcd_update_memory`
+- `gcd_delete_memory`
+- `gcd_ingest_text`
+- `gcd_search_context`
+- `gcd_diagnostics`
+- `gcd_export_snapshot`
+- `gcd_list_snapshots`
+- `gcd_restore_snapshot`
+
+兼容旧客户端时，也提供：
+
+- `memory_search`
+- `memory_export_snapshot`
+- `memory_restore_snapshot`
 
 ## 本地运行
 
@@ -40,6 +62,22 @@ docker-compose.yml
 ```
 
 不要再创建或保留 `docker-compose.yaml`，避免 NAS Docker GUI 读取错文件。
+
+## 手动快照
+
+导出快照：
+
+```bash
+curl -X POST http://NAS_IP:8000/snapshots
+```
+
+恢复快照：
+
+```bash
+curl -X POST http://NAS_IP:8000/snapshots/restore
+```
+
+恢复前务必确认快照来自本系统导出。
 
 ## NAS 手动更新包
 

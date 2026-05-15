@@ -31,24 +31,11 @@ docker compose up -d --build
 curl http://NAS_IP:8000/health
 ```
 
-正常返回类似：
-
-```json
-{
-  "ok": true,
-  "service": "global-context-db",
-  "version": "0.1.1-nas-update",
-  "data_dir": "/data",
-  "sqlite_path": "/data/gcd_v2.sqlite3",
-  "mcp": {
-    "host": "0.0.0.0",
-    "port": 8001,
-    "path": "/mcp"
-  }
-}
+```bash
+curl http://NAS_IP:8000/diagnostics
 ```
 
-如果只看到 `{"ok": true}`，说明 NAS 还在跑旧容器或旧镜像，需要重新构建/重新部署。
+正常情况下，`/health` 会返回服务名、版本、数据目录、SQLite 路径和 MCP 配置。`/diagnostics` 会返回记忆、文档、捕获、审计和失败摘要。
 
 ## MCP 地址
 
@@ -64,23 +51,30 @@ http://NAS_IP:8001/mcp
 http://192.168.10.5:8001/mcp
 ```
 
-## 手动更新
+## 工具名约定
 
-在 Windows 本机生成更新包：
+主工具名统一使用 `gcd_*`。旧客户端如果误调用 `memory_search`，现在也会兼容转到同一套搜索实现。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1
+## 快照
+
+导出快照：
+
+```bash
+curl -X POST http://NAS_IP:8000/snapshots
 ```
 
-把生成的 `release\global_context_db.zip` 放到 NAS 的 `docker/SR_AI` 这一层解压，覆盖同名 `global_context_db` 目录。
+恢复快照：
 
-更新时注意：
+```bash
+curl -X POST http://NAS_IP:8000/snapshots/restore
+```
 
-- 保留 NAS 上的 `data` 或 Docker 数据卷。
-- 删除旧的 `docker-compose.yaml`。
-- 只保留 `docker-compose.yml`。
-- 重新部署时选择重新构建镜像。
-- 不需要勾选“拉取最新镜像”。
+快照内容包含：
+
+- SQLite 数据库
+- LanceDB 数据目录
+- artifacts
+- manifest
 
 ## 桌面端连接 NAS
 
@@ -107,5 +101,6 @@ Docker 数据卷里保存：
 - `/data/gcd_v2.sqlite3`
 - `/data/lancedb_v2`
 - `/data/artifacts`
+- `/data/snapshots`
 
 外部工具不要直接访问这些文件，只通过 MCP 或 REST 访问。

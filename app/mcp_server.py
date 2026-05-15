@@ -3,7 +3,9 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from app.core.config import settings
-from app.core.schemas import IngestRequest, MemoryCreate, MemoryUpdate
+from app.core.schemas import IngestRequest, MemoryCreate, MemoryUpdate, SnapshotCreateRequest, SnapshotRestoreRequest
+from app.backup.service import export_snapshot, list_snapshots, restore_snapshot
+from app.governance.service import diagnostics
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
     add_memory,
@@ -95,6 +97,19 @@ def gcd_search_memories(
 
 
 @mcp.tool()
+def memory_search(
+    query: str,
+    top_k: int = 5,
+    user_id: str | None = None,
+    agent_id: str | None = None,
+    memory_type: str | None = None,
+) -> dict[str, Any]:
+    """Compatibility alias for older clients that call memory_search."""
+    bootstrap(settings)
+    return search_memory(query, top_k, user_id=user_id, agent_id=agent_id, memory_type=memory_type)
+
+
+@mcp.tool()
 def gcd_list_memories(
     user_id: str | None = None,
     agent_id: str | None = None,
@@ -118,6 +133,52 @@ def gcd_list_audit_logs(limit: int = 100) -> list[dict[str, Any]]:
     """List recent audit logs for memory changes."""
     bootstrap(settings)
     return list_audit_logs(limit)
+
+
+@mcp.tool()
+def gcd_diagnostics() -> dict[str, Any]:
+    """Return read-only service diagnostics for governance and recovery."""
+    bootstrap(settings)
+    return diagnostics()
+
+
+@mcp.tool()
+def gcd_export_snapshot(label: str | None = None, api_key: str | None = None) -> dict[str, Any]:
+    """Export a manual snapshot of sqlite, lancedb and artifacts."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return export_snapshot(label)
+
+
+@mcp.tool()
+def gcd_list_snapshots(limit: int = 20) -> list[dict[str, Any]]:
+    """List available manual snapshots."""
+    bootstrap(settings)
+    return list_snapshots(limit)
+
+
+@mcp.tool()
+def gcd_restore_snapshot(snapshot_path: str, api_key: str | None = None) -> dict[str, Any]:
+    """Restore a previously exported snapshot."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return restore_snapshot(snapshot_path)
+
+
+@mcp.tool()
+def memory_export_snapshot(label: str | None = None, api_key: str | None = None) -> dict[str, Any]:
+    """Compatibility alias for older clients that expect memory_export_snapshot."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return export_snapshot(label)
+
+
+@mcp.tool()
+def memory_restore_snapshot(snapshot_path: str, api_key: str | None = None) -> dict[str, Any]:
+    """Compatibility alias for older clients that expect memory_restore_snapshot."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return restore_snapshot(snapshot_path)
 
 
 @mcp.tool()

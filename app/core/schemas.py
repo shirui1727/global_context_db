@@ -78,3 +78,11 @@ class FeedCreateRequest(BaseModel):
 
 class CrawlJobCreateRequest(BaseModel):
     urls: list[str] = Field(default_factory=list)
+
+
+class SnapshotCreateRequest(BaseModel):
+    label: str | None = None
+
+
+class SnapshotRestoreRequest(BaseModel):
+    snapshot_path: str

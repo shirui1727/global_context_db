@@ -154,6 +154,59 @@ def _conn() -> sqlite3.Connection:
     return sqlite3.connect(_sqlite_path)
 
 
+def sqlite_path() -> Path:
+    if _sqlite_path is None:
+        raise RuntimeError("SQLite not initialized")
+    return _sqlite_path
+
+
+def db_counts() -> dict[str, int]:
+    tables = [
+        "documents",
+        "chunks",
+        "memories",
+        "memory_versions",
+        "audit_logs",
+        "captures",
+        "feeds",
+        "feed_items",
+        "crawl_jobs",
+        "crawl_job_items",
+    ]
+    with _conn() as conn:
+        return {table: int(conn.execute(f"select count(*) from {table}").fetchone()[0]) for table in tables}
+
+
+def failed_operations(limit: int = 20) -> list[dict]:
+    query = """
+        select 'capture' as source, id, status, error, created_at
+        from captures
+        where status = 'failed' or error is not null
+        union all
+        select 'feed_item' as source, id, status, error, created_at
+        from feed_items
+        where status = 'failed' or error is not null
+        union all
+        select 'crawl_item' as source, id, status, error, null as created_at
+        from crawl_job_items
+        where status = 'failed' or error is not null
+        order by created_at desc
+        limit ?
+    """
+    with _conn() as conn:
+        rows = conn.execute(query, (limit,)).fetchall()
+    return [
+        {
+            "source": row[0],
+            "id": row[1],
+            "status": row[2],
+            "error": row[3],
+            "created_at": row[4],
+        }
+        for row in rows
+    ]
+
+
 class DocumentsRepo:
     def upsert(self, doc_id: str, source: str, content: str) -> None:
         with _conn() as conn:
@@ -254,6 +307,41 @@ class MemoriesRepo:
         with _conn() as conn:
             cursor = conn.execute("delete from memories where id = ?", (memory_id,))
             return cursor.rowcount > 0
+
+    def duplicate_candidates(self, limit: int = 50) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select user_id, coalesce(agent_id, ''), coalesce(session_id, ''),
+                       coalesce(conversation_id, ''), memory_type, content,
+                       count(*) as duplicate_count,
+                       group_concat(id) as ids,
+                       min(created_at) as first_created_at,
+                       max(updated_at) as last_updated_at
+                from memories
+                group by user_id, coalesce(agent_id, ''), coalesce(session_id, ''),
+                         coalesce(conversation_id, ''), memory_type, content
+                having count(*) > 1
+                order by duplicate_count desc, last_updated_at desc
+                limit ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "user_id": row[0] or "default",
+                "agent_id": row[1] or None,
+                "session_id": row[2] or None,
+                "conversation_id": row[3] or None,
+                "memory_type": row[4] or "long_term",
+                "content_preview": (row[5] or "")[:200],
+                "duplicate_count": row[6],
+                "ids": [item for item in (row[7] or "").split(",") if item],
+                "first_created_at": row[8],
+                "last_updated_at": row[9],
+            }
+            for row in rows
+        ]
 
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         try:

@@ -5,6 +5,11 @@ from app.storage.vector_store import init_vector_store
 _bootstrapped = False
 
 
+def reset_bootstrap() -> None:
+    global _bootstrapped
+    _bootstrapped = False
+
+
 def bootstrap(settings: Settings) -> None:
     global _bootstrapped
     if _bootstrapped:

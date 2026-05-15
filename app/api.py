@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 
+from app.backup.service import export_snapshot, list_snapshots, restore_snapshot
 from app.capture.crawl import create_crawl_job, get_crawl_job
 from app.capture.service import (
     capture_web,
@@ -19,9 +20,12 @@ from app.core.schemas import (
     MemoryCreate,
     MemoryUpdate,
     SearchRequest,
+    SnapshotCreateRequest,
+    SnapshotRestoreRequest,
     UrlIngestRequest,
     WebCaptureRequest,
 )
+from app.governance.service import diagnostics
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
     add_memory,
@@ -75,8 +79,8 @@ def home() -> str:
         <div class="grid">
           <div class="panel"><h2>MCP 接入</h2><p><code>__MCP_URL__</code> 给支持远程 MCP 的 AI 工具使用。</p></div>
           <div class="panel"><h2>REST 健康检查</h2><p><code>/health</code> 返回服务名、版本、数据目录和 MCP 配置。</p></div>
-          <div class="panel"><h2>长期记忆</h2><p>支持写入、搜索、去重、版本历史和审计日志。</p></div>
-          <div class="panel"><h2>桌面管理</h2><p>桌面端负责导入、检索、治理和连接 NAS 服务。</p></div>
+          <div class="panel"><h2>治理诊断</h2><p><code>/diagnostics</code> 返回统计、审计、失败记录和重复候选。</p></div>
+          <div class="panel"><h2>快照恢复</h2><p><code>/snapshots</code> 支持手动导出和恢复 NAS 数据快照。</p></div>
         </div>
       </div>
     </body>
@@ -98,6 +102,29 @@ def health() -> dict:
             "path": settings.mcp_path,
         },
     }
+
+
+@router.get("/diagnostics")
+def diagnostics_get() -> dict:
+    return diagnostics()
+
+
+@router.post("/snapshots", dependencies=[Depends(require_api_key)])
+def snapshots_create(payload: SnapshotCreateRequest) -> dict:
+    return export_snapshot(payload.label)
+
+
+@router.get("/snapshots")
+def snapshots_list(limit: int = 20) -> list[dict]:
+    return list_snapshots(limit)
+
+
+@router.post("/snapshots/restore", dependencies=[Depends(require_api_key)])
+def snapshots_restore(payload: SnapshotRestoreRequest) -> dict:
+    try:
+        return restore_snapshot(payload.snapshot_path)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/documents/ingest")
