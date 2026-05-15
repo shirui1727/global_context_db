@@ -53,6 +53,17 @@ const mockFeeds: FeedSummary[] = [
 ];
 
 const mockAPI: DesktopAPI = {
+  async getSettings() {
+    return {
+      backendUrl: "http://127.0.0.1:8000",
+      backendMode: "local",
+      apiKey: "",
+      autoStartLocalBackend: true
+    };
+  },
+  async saveSettings(payload) {
+    return payload;
+  },
   async getBackendStatus() {
     return {
       url: "http://127.0.0.1:8000",

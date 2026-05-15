@@ -381,6 +381,41 @@ button:disabled {
   gap: 10px;
 }
 
+.settings-form {
+  align-content: start;
+}
+
+.field-label,
+.checkbox-row,
+.radio-tile {
+  display: grid;
+  gap: 7px;
+  color: var(--muted-strong);
+}
+
+.field-label span,
+.checkbox-row span,
+.radio-tile span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.radio-tile,
+.checkbox-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
 .input-block input,
 .input-block textarea,
 .memory-editor input,

@@ -5,6 +5,13 @@ export type BackendStatus = {
   message: string;
 };
 
+export type DesktopSettings = {
+  backendUrl: string;
+  backendMode: "local" | "remote";
+  apiKey: string;
+  autoStartLocalBackend: boolean;
+};
+
 export type DocumentSummary = {
   id: string;
   source: string;
@@ -203,6 +210,8 @@ export type FolderImportResult = {
 };
 
 export type DesktopAPI = {
+  getSettings: () => Promise<DesktopSettings>;
+  saveSettings: (payload: DesktopSettings) => Promise<DesktopSettings>;
   getBackendStatus: () => Promise<BackendStatus>;
   openBackendDashboard: () => Promise<boolean>;
   openExternalUrl: (payload: { url: string }) => Promise<boolean>;

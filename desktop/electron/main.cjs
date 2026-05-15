@@ -5,9 +5,10 @@ const { TextDecoder } = require("node:util");
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 
 const isDev = !app.isPackaged && Boolean(process.env.VITE_DEV_SERVER_URL);
-const BACKEND_URL = process.env.GCD_BACKEND_URL || "http://127.0.0.1:8000";
+const DEFAULT_BACKEND_URL = process.env.GCD_BACKEND_URL || "http://127.0.0.1:8000";
 const BACKEND_HOST = "127.0.0.1";
 const BACKEND_PORT = "8000";
+const SETTINGS_FILE = "desktop-settings.json";
 const MAX_TEXT_FILE_BYTES = 5 * 1024 * 1024;
 const IMPORTABLE_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".csv", ".log"]);
 const IGNORED_DIRECTORY_NAMES = new Set(["node_modules", ".git", "dist", "release", "__pycache__"]);
@@ -17,14 +18,82 @@ const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 let mainWindow = null;
 let backendProcess = null;
-let backendOwnedByApp = false;
 let backendReadyPromise = null;
+let runtimeSettings = {
+  backendUrl: DEFAULT_BACKEND_URL,
+  backendMode: "local",
+  apiKey: "",
+  autoStartLocalBackend: true
+};
 let backendStatus = {
-  url: BACKEND_URL,
+  url: DEFAULT_BACKEND_URL,
   running: false,
   ownedByApp: false,
-  message: "正在连接本地服务..."
+  message: "正在连接服务..."
 };
+
+function settingsPath() {
+  return path.join(app.getPath("userData"), SETTINGS_FILE);
+}
+
+function normalizeSettings(input = {}) {
+  const backendUrl = String(input.backendUrl || DEFAULT_BACKEND_URL).trim() || DEFAULT_BACKEND_URL;
+  return {
+    backendUrl,
+    backendMode: input.backendMode === "remote" ? "remote" : "local",
+    apiKey: String(input.apiKey || "").trim(),
+    autoStartLocalBackend: input.autoStartLocalBackend !== false
+  };
+}
+
+async function loadSettings() {
+  try {
+    const raw = await fs.readFile(settingsPath(), "utf8");
+    runtimeSettings = normalizeSettings(JSON.parse(raw));
+  } catch (_error) {
+    runtimeSettings = normalizeSettings(runtimeSettings);
+  }
+  updateBackendStatus({ url: runtimeSettings.backendUrl });
+  return runtimeSettings;
+}
+
+async function saveSettings(next) {
+  runtimeSettings = normalizeSettings({ ...runtimeSettings, ...next });
+  await fs.mkdir(path.dirname(settingsPath()), { recursive: true });
+  await fs.writeFile(settingsPath(), JSON.stringify(runtimeSettings, null, 2), "utf8");
+  backendReadyPromise = null;
+  updateBackendStatus({
+    url: runtimeSettings.backendUrl,
+    running: false,
+    ownedByApp: false,
+    message: "配置已保存，正在重新连接..."
+  });
+  return runtimeSettings;
+}
+
+function backendUrl(pathname = "") {
+  return `${runtimeSettings.backendUrl}${pathname}`;
+}
+
+function backendHeaders(headers = {}) {
+  if (!runtimeSettings.apiKey) {
+    return headers;
+  }
+  return {
+    ...headers,
+    "x-api-key": runtimeSettings.apiKey,
+    authorization: `Bearer ${runtimeSettings.apiKey}`
+  };
+}
+
+function isLocalManageableBackend() {
+  try {
+    const target = new URL(runtimeSettings.backendUrl);
+    return runtimeSettings.backendMode === "local" && runtimeSettings.autoStartLocalBackend && ["127.0.0.1", "localhost", "::1"].includes(target.hostname);
+  } catch (_error) {
+    return false;
+  }
+}
 
 function toPosixPath(value) {
   return value.split(path.sep).join("/");
@@ -88,22 +157,13 @@ async function collectFolderFiles(folderPath) {
         await walk(absolutePath);
         continue;
       }
-
       if (!entry.isFile()) continue;
 
       scanned += 1;
       const ext = path.extname(entry.name).toLowerCase();
       if (!IMPORTABLE_EXTENSIONS.has(ext)) {
         skipped += 1;
-        files.push({
-          path: absolutePath,
-          relativePath,
-          size: 0,
-          ext,
-          importable: false,
-          reason: "不支持的文件类型",
-          status: "skipped"
-        });
+        files.push({ path: absolutePath, relativePath, size: 0, ext, importable: false, reason: "不支持的文件类型", status: "skipped" });
         continue;
       }
 
@@ -140,14 +200,7 @@ async function collectFolderFiles(folderPath) {
 
       importable += 1;
       totalBytes += stat.size;
-      files.push({
-        path: absolutePath,
-        relativePath,
-        size: stat.size,
-        ext,
-        importable: true,
-        status: "ready"
-      });
+      files.push({ path: absolutePath, relativePath, size: stat.size, ext, importable: true, status: "ready" });
     }
   }
 
@@ -156,28 +209,18 @@ async function collectFolderFiles(folderPath) {
 }
 
 function normalizeIngestResult(file, result) {
-  return {
-    ...file,
-    status: "imported",
-    document_id: result.document_id,
-    chunks: result.chunks
-  };
+  return { ...file, status: "imported", document_id: result.document_id, chunks: result.chunks };
 }
 
 function normalizeFailedResult(file, message) {
-  return {
-    ...file,
-    status: "failed",
-    reason: message
-  };
+  return { ...file, status: "failed", reason: message };
 }
 
 function updateBackendStatus(patch) {
   backendStatus = {
     ...backendStatus,
     ...patch,
-    url: BACKEND_URL,
-    ownedByApp: backendOwnedByApp
+    url: runtimeSettings.backendUrl
   };
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("gcd:backend-status", backendStatus);
@@ -186,7 +229,7 @@ function updateBackendStatus(patch) {
 
 async function checkBackend() {
   try {
-    const response = await fetch(`${BACKEND_URL}/health`);
+    const response = await fetch(backendUrl("/health"), { headers: backendHeaders() });
     return response.ok;
   } catch (_error) {
     return false;
@@ -194,10 +237,9 @@ async function checkBackend() {
 }
 
 function startBackend() {
-  if (backendProcess) return;
+  if (backendProcess || !isLocalManageableBackend()) return;
   const python = process.env.PYTHON || "python";
-  backendOwnedByApp = true;
-  updateBackendStatus({ running: false, message: "正在启动本地服务..." });
+  updateBackendStatus({ running: false, ownedByApp: true, message: "正在启动本地服务..." });
   backendProcess = spawn(python, ["-m", "uvicorn", "app.main:app", "--host", BACKEND_HOST, "--port", BACKEND_PORT], {
     cwd: projectRoot,
     env: process.env,
@@ -207,12 +249,11 @@ function startBackend() {
   });
   backendProcess.on("exit", (code) => {
     backendProcess = null;
-    if (backendOwnedByApp) {
-      updateBackendStatus({
-        running: false,
-        message: `本地服务已退出${typeof code === "number" ? `，代码 ${code}` : ""}。`
-      });
-    }
+    updateBackendStatus({
+      running: false,
+      ownedByApp: false,
+      message: `本地服务已退出${typeof code === "number" ? `，代码 ${code}` : ""}。`
+    });
   });
 }
 
@@ -226,29 +267,34 @@ async function ensureBackend() {
 
 async function ensureBackendInner() {
   if (await checkBackend()) {
-    backendOwnedByApp = false;
-    updateBackendStatus({ running: true, message: "已连接到正在运行的本地服务。" });
+    updateBackendStatus({ running: true, ownedByApp: false, message: "已连接到服务。" });
+    return backendStatus;
+  }
+
+  if (!isLocalManageableBackend()) {
+    updateBackendStatus({ running: false, ownedByApp: false, message: "远程服务未连接，请检查 NAS 地址。" });
     return backendStatus;
   }
 
   startBackend();
   for (let attempt = 0; attempt < 60; attempt += 1) {
     if (await checkBackend()) {
-      updateBackendStatus({ running: true, message: "本地服务已启动。" });
+      updateBackendStatus({ running: true, ownedByApp: true, message: "本地服务已启动。" });
       return backendStatus;
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  updateBackendStatus({ running: false, message: "本地服务启动超时。" });
+  updateBackendStatus({ running: false, ownedByApp: false, message: "本地服务启动超时。" });
   return backendStatus;
 }
 
 async function requestBackend(pathname, options = {}) {
-  if (pathname !== "/health") {
-    await ensureBackend();
-  }
-  const response = await fetch(`${BACKEND_URL}${pathname}`, options);
+  if (pathname !== "/health") await ensureBackend();
+  const response = await fetch(backendUrl(pathname), {
+    ...options,
+    headers: backendHeaders(options.headers || {})
+  });
   const text = await response.text();
   let body = null;
   try {
@@ -292,16 +338,19 @@ function createWindow() {
 }
 
 function registerIpcHandlers() {
+  ipcMain.handle("gcd:get-settings", async () => runtimeSettings);
+  ipcMain.handle("gcd:save-settings", async (_event, payload) => {
+    const saved = await saveSettings(payload || {});
+    void ensureBackend();
+    return saved;
+  });
   ipcMain.handle("gcd:get-backend-status", async () => {
     const running = await checkBackend();
-    updateBackendStatus({
-      running,
-      message: running ? backendStatus.message || "本地服务运行中。" : "本地服务未连接。"
-    });
+    updateBackendStatus({ running, message: running ? "服务运行中。" : "服务未连接。" });
     return backendStatus;
   });
   ipcMain.handle("gcd:open-backend-dashboard", async () => {
-    await shell.openExternal(`${BACKEND_URL}/`);
+    await shell.openExternal(backendUrl("/"));
     return true;
   });
   ipcMain.handle("gcd:open-external-url", async (_event, payload) => {
@@ -328,10 +377,7 @@ function registerIpcHandlers() {
     });
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
-  ipcMain.handle("gcd:scan-folder", async (_event, payload) => {
-    const folderPath = resolveFolderPath(payload?.folderPath);
-    return collectFolderFiles(folderPath);
-  });
+  ipcMain.handle("gcd:scan-folder", async (_event, payload) => collectFolderFiles(resolveFolderPath(payload?.folderPath)));
   ipcMain.handle("gcd:ingest-folder", async (_event, payload) => {
     const folderPath = resolveFolderPath(payload?.folderPath);
     const scan = await collectFolderFiles(folderPath);
@@ -366,63 +412,42 @@ function registerIpcHandlers() {
   ipcMain.handle("gcd:list-memories", () => requestBackend("/memories"));
   ipcMain.handle("gcd:list-memory-versions", (_event, payload) => {
     const memoryId = String(payload?.memoryId ?? "").trim();
-    const limit = Number(payload?.limit ?? 20);
-    return requestBackend(`/memories/${encodeURIComponent(memoryId)}/versions?limit=${limit}`);
+    return requestBackend(`/memories/${encodeURIComponent(memoryId)}/versions?limit=${Number(payload?.limit ?? 20)}`);
   });
-  ipcMain.handle("gcd:list-audit-logs", (_event, payload) => {
-    const limit = Number(payload?.limit ?? 100);
-    return requestBackend(`/audit-logs?limit=${limit}`);
-  });
+  ipcMain.handle("gcd:list-audit-logs", (_event, payload) => requestBackend(`/audit-logs?limit=${Number(payload?.limit ?? 100)}`));
   ipcMain.handle("gcd:search", (_event, payload) =>
     requestBackend("/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: String(payload?.query ?? ""),
-        top_k: Number(payload?.topK ?? 5)
-      })
+      body: JSON.stringify({ query: String(payload?.query ?? ""), top_k: Number(payload?.topK ?? 5) })
     })
   );
   ipcMain.handle("gcd:search-memories", (_event, payload) => {
-    const params = new URLSearchParams({
-      q: String(payload?.query ?? ""),
-      top_k: String(Number(payload?.topK ?? 5))
-    });
+    const params = new URLSearchParams({ q: String(payload?.query ?? ""), top_k: String(Number(payload?.topK ?? 5)) });
     return requestBackend(`/memories/search?${params.toString()}`);
   });
   ipcMain.handle("gcd:add-memory", (_event, payload) =>
     requestBackend("/memories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: String(payload?.content ?? ""),
-        tags: Array.isArray(payload?.tags) ? payload.tags.map(String) : []
-      })
+      body: JSON.stringify({ content: String(payload?.content ?? ""), tags: Array.isArray(payload?.tags) ? payload.tags.map(String) : [] })
     })
   );
   ipcMain.handle("gcd:update-memory", (_event, payload) =>
     requestBackend(`/memories/${encodeURIComponent(String(payload?.memoryId ?? ""))}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: String(payload?.content ?? ""),
-        tags: Array.isArray(payload?.tags) ? payload.tags.map(String) : []
-      })
+      body: JSON.stringify({ content: String(payload?.content ?? ""), tags: Array.isArray(payload?.tags) ? payload.tags.map(String) : [] })
     })
   );
   ipcMain.handle("gcd:delete-memory", (_event, payload) =>
-    requestBackend(`/memories/${encodeURIComponent(String(payload?.memoryId ?? ""))}`, {
-      method: "DELETE"
-    })
+    requestBackend(`/memories/${encodeURIComponent(String(payload?.memoryId ?? ""))}`, { method: "DELETE" })
   );
   ipcMain.handle("gcd:ingest-text", (_event, payload) =>
     requestBackend("/documents/ingest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source: String(payload?.source ?? "manual"),
-        text: String(payload?.text ?? "")
-      })
+      body: JSON.stringify({ source: String(payload?.source ?? "manual"), text: String(payload?.text ?? "") })
     })
   );
   ipcMain.handle("gcd:ingest-url", (_event, payload) =>
@@ -440,28 +465,19 @@ function registerIpcHandlers() {
     requestBackend("/feeds", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: String(payload?.url ?? ""),
-        title: payload?.title ? String(payload.title) : null
-      })
+      body: JSON.stringify({ url: String(payload?.url ?? ""), title: payload?.title ? String(payload.title) : null })
     })
   );
   ipcMain.handle("gcd:list-feeds", () => requestBackend("/feeds"));
-  ipcMain.handle("gcd:refresh-feed", (_event, payload) =>
-    requestBackend(`/feeds/${encodeURIComponent(String(payload?.id ?? ""))}/refresh`, { method: "POST" })
-  );
+  ipcMain.handle("gcd:refresh-feed", (_event, payload) => requestBackend(`/feeds/${encodeURIComponent(String(payload?.id ?? ""))}/refresh`, { method: "POST" }));
   ipcMain.handle("gcd:create-crawl-job", (_event, payload) =>
     requestBackend("/crawl/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        urls: Array.isArray(payload?.urls) ? payload.urls.map(String) : []
-      })
+      body: JSON.stringify({ urls: Array.isArray(payload?.urls) ? payload.urls.map(String) : [] })
     })
   );
-  ipcMain.handle("gcd:get-crawl-job", (_event, payload) =>
-    requestBackend(`/crawl/jobs/${encodeURIComponent(String(payload?.id ?? ""))}`)
-  );
+  ipcMain.handle("gcd:get-crawl-job", (_event, payload) => requestBackend(`/crawl/jobs/${encodeURIComponent(String(payload?.id ?? ""))}`));
   ipcMain.handle("gcd:ingest-file", async (_event, payload) => {
     const filePath = String(payload?.filePath ?? "").trim();
     if (!filePath) throw new Error("请选择一个文件。");
@@ -469,15 +485,13 @@ function registerIpcHandlers() {
     return requestBackend("/documents/ingest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source: filePath,
-        text
-      })
+      body: JSON.stringify({ source: filePath, text })
     });
   });
 }
 
 app.whenReady().then(async () => {
+  await loadSettings();
   registerIpcHandlers();
   createWindow();
   await ensureBackend();
@@ -491,5 +505,5 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  if (backendProcess && backendOwnedByApp) backendProcess.kill();
+  if (backendProcess) backendProcess.kill();
 });

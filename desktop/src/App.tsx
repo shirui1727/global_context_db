@@ -12,10 +12,11 @@ import type {
   FolderScanResult,
   MemorySummary,
   MemoryVersion,
-  SearchResult
+  SearchResult,
+  DesktopSettings
 } from "./types";
 
-type ViewKey = "overview" | "capture" | "documents" | "memory" | "governance";
+type ViewKey = "overview" | "capture" | "documents" | "memory" | "governance" | "settings";
 type ToastTone = "info" | "success" | "error";
 type Toast = { tone: ToastTone; message: string } | null;
 type SelectedItem = SearchResult | DocumentSummary | MemorySummary | FolderScanFile | CaptureSummary | null;
@@ -26,6 +27,13 @@ const initialStatus: BackendStatus = {
   running: false,
   ownedByApp: false,
   message: "正在连接本地服务..."
+};
+
+const initialSettings: DesktopSettings = {
+  backendUrl: "http://127.0.0.1:8000",
+  backendMode: "local",
+  apiKey: "",
+  autoStartLocalBackend: true
 };
 
 function splitTags(value: string) {
@@ -82,6 +90,7 @@ export default function App() {
   const [folderPath, setFolderPath] = useState("");
   const [folderScan, setFolderScan] = useState<FolderScanResult | null>(null);
   const [folderImport, setFolderImport] = useState<FolderImportResult | null>(null);
+  const [settings, setSettings] = useState<DesktopSettings>(initialSettings);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
 
@@ -91,7 +100,8 @@ export default function App() {
   };
 
   const refreshAll = async () => {
-    const [backendStatus, docs, caps, feedRows, mems, logs] = await Promise.all([
+    const [savedSettings, backendStatus, docs, caps, feedRows, mems, logs] = await Promise.all([
+      api.getSettings(),
       api.getBackendStatus(),
       api.listDocuments(),
       api.listCaptures(),
@@ -99,6 +109,7 @@ export default function App() {
       api.listMemories(),
       api.listAuditLogs({ limit: 50 })
     ]);
+    setSettings(savedSettings);
     setStatus(backendStatus);
     setDocuments(docs);
     setCaptures(caps);
@@ -106,6 +117,25 @@ export default function App() {
     setMemories(mems);
     setAuditLogs(logs);
     setSelected((current) => current ?? caps[0] ?? docs[0] ?? mems[0] ?? null);
+  };
+
+  const saveDesktopSettings = async () => {
+    const backendUrl = settings.backendUrl.trim();
+    if (!backendUrl) return showToast("后端地址不能为空", "error");
+    setLoading(true);
+    try {
+      const saved = await api.saveSettings({ ...settings, backendUrl });
+      setSettings(saved);
+      const backendStatus = await api.getBackendStatus();
+      setStatus(backendStatus);
+      await refreshAll();
+      setView("settings");
+      showToast("连接配置已保存", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "保存配置失败", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -375,6 +405,7 @@ export default function App() {
           <NavButton active={view === "documents"} onClick={() => setView("documents")} label="文档" />
           <NavButton active={view === "memory"} onClick={() => setView("memory")} label="记忆" />
           <NavButton active={view === "governance"} onClick={() => setView("governance")} label="治理" />
+          <NavButton active={view === "settings"} onClick={() => setView("settings")} label="设置" />
         </nav>
 
         <div className="sidebar-stats">
@@ -624,6 +655,76 @@ export default function App() {
                 </button>
               ))}
             </PanelCard>
+          </div>
+        </>
+      );
+    }
+
+    if (view === "settings") {
+      return (
+        <>
+          <PanelHeader eyebrow="Settings" title="连接设置" meta={settings.backendMode === "remote" ? "NAS / 远程服务" : "本机服务"} />
+          <div className="input-block settings-form">
+            <label className="field-label">
+              <span>后端地址</span>
+              <input
+                value={settings.backendUrl}
+                placeholder="http://192.168.10.5:8000"
+                onChange={(event) => setSettings((current) => ({ ...current, backendUrl: event.target.value }))}
+              />
+            </label>
+            <div className="settings-row">
+              <label className="radio-tile">
+                <input
+                  type="radio"
+                  checked={settings.backendMode === "local"}
+                  onChange={() => setSettings((current) => ({ ...current, backendMode: "local" }))}
+                />
+                <span>本机服务</span>
+              </label>
+              <label className="radio-tile">
+                <input
+                  type="radio"
+                  checked={settings.backendMode === "remote"}
+                  onChange={() => setSettings((current) => ({ ...current, backendMode: "remote", autoStartLocalBackend: false }))}
+                />
+                <span>NAS / 远程服务</span>
+              </label>
+            </div>
+            <label className="field-label">
+              <span>API Key</span>
+              <input
+                value={settings.apiKey}
+                placeholder="没有开启鉴权可以留空"
+                type="password"
+                onChange={(event) => setSettings((current) => ({ ...current, apiKey: event.target.value }))}
+              />
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={settings.autoStartLocalBackend}
+                disabled={settings.backendMode === "remote"}
+                onChange={(event) => setSettings((current) => ({ ...current, autoStartLocalBackend: event.target.checked }))}
+              />
+              <span>本机模式下自动启动 FastAPI 服务</span>
+            </label>
+            <div className="inline-fields">
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => setSettings((current) => ({ ...current, backendUrl: "http://192.168.10.5:8000", backendMode: "remote", autoStartLocalBackend: false }))}
+              >
+                填入 NAS 示例
+              </button>
+              <button className="primary-button" type="button" disabled={loading} onClick={() => void saveDesktopSettings()}>
+                保存并重连
+              </button>
+            </div>
+          </div>
+          <div className="item-list">
+            <InfoCard title="当前连接" description={status.message} extra={status.url} />
+            <InfoCard title="MCP 地址" description="给 Codex、OpenClaw 等工具使用" extra={settings.backendUrl.replace(/:8000\/?$/, ":8001/mcp")} />
           </div>
         </>
       );
