@@ -1,0 +1,95 @@
+:root {
+  color-scheme: light;
+  --text: #172033;
+  --muted: #667085;
+  --line: #d9e2ef;
+  --accent: #1769aa;
+  --danger: #b42318;
+  --success: #157347;
+  font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 320px;
+  margin: 0;
+  background: #f5f7fb;
+  color: var(--text);
+}
+
+main {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+header {
+  display: grid;
+  gap: 4px;
+}
+
+header span,
+label,
+p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  outline: 0;
+  font: inherit;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+}
+
+button {
+  width: 100%;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
+button:nth-child(2),
+button:nth-child(3) {
+  border-color: #b9d5eb;
+  background: #e7f2fb;
+  color: #0f4f83;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+p {
+  min-height: 18px;
+  margin: 0;
+  line-height: 1.45;
+}
+
+p.success {
+  color: var(--success);
+}
+
+p.error {
+  color: var(--danger);
+}

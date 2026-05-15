@@ -1,0 +1,29 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      GCD_DATA_DIR: /data
+      GCD_SQLITE_PATH: /data/gcd_v2.sqlite3
+      GCD_LANCEDB_DIR: /data/lancedb_v2
+    volumes:
+      - gcd-data:/data
+
+  mcp:
+    build: .
+    command: ["gcd-mcp-http"]
+    ports:
+      - "8001:8001"
+    environment:
+      GCD_DATA_DIR: /data
+      GCD_SQLITE_PATH: /data/gcd_v2.sqlite3
+      GCD_LANCEDB_DIR: /data/lancedb_v2
+      GCD_MCP_HOST: 0.0.0.0
+      GCD_MCP_PORT: 8001
+      GCD_MCP_PATH: /mcp
+    volumes:
+      - gcd-data:/data
+
+volumes:
+  gcd-data:

@@ -1,0 +1,13 @@
+desktop
+data
+docs
+global_context_db.egg-info
+__pycache__
+*.pyc
+.git
+.venv
+venv
+node_modules
+npm-debug.log
+Dockerfile
+docker-compose.yml

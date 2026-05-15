@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Global Context DB</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <strong>Global Context DB</strong>
+        <span id="status">检查本地服务...</span>
+      </header>
+      <label>
+        标签
+        <input id="tags" placeholder="多个标签用逗号分隔" />
+      </label>
+      <div class="actions">
+        <button id="savePage" type="button">保存当前页</button>
+        <button id="saveSelection" type="button">保存选中文本</button>
+        <button id="saveScreenshot" type="button">保存可见截图</button>
+      </div>
+      <p id="message"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

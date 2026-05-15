@@ -1,0 +1,26 @@
+[project]
+name = "global-context-db"
+version = "0.1.0"
+description = "Local multimodal context database MVP"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.4",
+  "lancedb>=0.16",
+  "numpy>=2.0",
+  "python-multipart>=0.0.9",
+  "httpx>=0.27",
+  "beautifulsoup4>=4.12",
+  "feedparser>=6.0",
+  "mcp>=1.0",
+]
+
+[project.scripts]
+gcd = "app.cli:main"
+gcd-mcp = "app.mcp_server:main"
+gcd-mcp-http = "app.mcp_server:http_main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
