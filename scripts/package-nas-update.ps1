@@ -41,7 +41,8 @@ $Items = @(
     "docker-compose.yaml",
     "Dockerfile",
     "pyproject.toml",
-    "README.md"
+    "README.md",
+    "tools"
 )
 
 foreach ($Item in $Items) {
@@ -86,7 +87,8 @@ try {
     $RequiredEntries = @(
         "global_context_db/app/api.py",
         "global_context_db/app/core/config.py",
-        "global_context_db/docker-compose.yaml"
+        "global_context_db/docker-compose.yaml",
+        "global_context_db/tools/media_manifest_worker.py"
     )
     foreach ($Required in $RequiredEntries) {
         if (-not ($Entries | Where-Object { $_.FullName -replace "\\", "/" -eq $Required })) {

@@ -27,6 +27,10 @@ def init_sqlite(path: Path) -> None:
             session_id text,
             conversation_id text,
             memory_type text default 'long_term',
+            context_domain text default 'memory',
+            status text default 'active',
+            source_kind text default 'agent_note',
+            trust_level text default 'verified',
             metadata text default '{}',
             created_at text,
             updated_at text
@@ -48,6 +52,44 @@ def init_sqlite(path: Path) -> None:
             metadata text,
             changed_at text,
             change_type text
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists memory_evidence (
+            id text primary key,
+            memory_id text,
+            source_domain text,
+            source_id text,
+            quote text,
+            confidence real default 1.0,
+            created_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists memory_promotion_proposals (
+            id text primary key,
+            source_session_id text,
+            source_event_ids text default '[]',
+            proposed_content text,
+            tags text,
+            memory_type text default 'long_term',
+            user_id text default 'default',
+            agent_id text,
+            project_path text,
+            status text default 'pending',
+            reason text,
+            created_by text,
+            reviewed_by text,
+            created_at text,
+            updated_at text,
+            reviewed_at text,
+            promoted_memory_id text,
+            metadata text default '{}'
         )
         """
     )
@@ -137,6 +179,264 @@ def init_sqlite(path: Path) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        create table if not exists file_references (
+            id text primary key,
+            uri text unique,
+            title text,
+            media_type text,
+            asset_kind text,
+            asset_key text,
+            size_bytes integer,
+            checksum text,
+            summary text,
+            tags text,
+            storage_mode text default 'referenced',
+            context_domain text default 'asset',
+            status text default 'active',
+            source_kind text default 'nas_reference',
+            trust_level text default 'unverified',
+            version_group_id text,
+            analysis_status text default 'indexed',
+            last_seen_at text,
+            missing_since text,
+            content_changed_at text,
+            derived_artifacts text default '{}',
+            metadata text default '{}',
+            created_at text,
+            updated_at text
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists assets (
+            id text primary key,
+            asset_key text,
+            asset_kind text,
+            title text,
+            summary text,
+            tags text,
+            media_type text,
+            status text default 'active',
+            trust_level text default 'unverified',
+            source_kind text default 'nas_reference',
+            analysis_status text default 'indexed',
+            created_by text,
+            updated_by text,
+            confirmed_by text,
+            created_at text,
+            updated_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists asset_locations (
+            id text primary key,
+            asset_id text,
+            uri text unique,
+            uri_normalized text,
+            storage_mode text default 'referenced',
+            location_status text default 'active',
+            last_seen_at text,
+            missing_since text,
+            forbidden_since text,
+            created_at text,
+            updated_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists asset_versions (
+            id text primary key,
+            asset_id text,
+            version_group_id text,
+            checksum text,
+            size_bytes integer,
+            modified_at text,
+            content_signature text,
+            version_status text default 'current',
+            is_current integer default 1,
+            created_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists asset_artifacts (
+            id text primary key,
+            asset_id text,
+            version_id text,
+            artifact_kind text,
+            artifact_uri text,
+            media_type text,
+            checksum text,
+            status text default 'pending',
+            generated_by text,
+            created_at text,
+            updated_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists asset_scan_runs (
+            id text primary key,
+            scope_prefix text,
+            status text,
+            observed_count integer default 0,
+            created_by text,
+            started_at text,
+            finished_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists agent_sessions (
+            id text primary key,
+            source_agent text,
+            project_path text,
+            status text default 'running',
+            title text,
+            summary text,
+            started_at text,
+            last_activity_at text,
+            ended_at text,
+            created_by text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists session_events (
+            id text primary key,
+            session_id text,
+            event_type text,
+            role text,
+            content text,
+            tool_name text,
+            tool_args text default '{}',
+            tool_result text,
+            created_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists session_traces (
+            id text primary key,
+            session_id text,
+            trace_id text,
+            origin_function text,
+            status text,
+            memory_query text,
+            memory_context text,
+            method_params text default '{}',
+            method_return_value text,
+            error_message text,
+            feedback_text text,
+            created_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists session_summaries (
+            id text primary key,
+            session_id text,
+            summary_kind text,
+            content text,
+            status text default 'active',
+            created_by text,
+            created_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists session_model_usage (
+            id text primary key,
+            session_id text,
+            model text,
+            tokens_in integer default 0,
+            tokens_out integer default 0,
+            cost_usd real default 0,
+            updated_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists improvement_tasks (
+            id text primary key,
+            task_kind text,
+            target_domain text,
+            target_id text,
+            status text default 'pending',
+            priority integer default 50,
+            reason text,
+            created_by text,
+            claimed_by text,
+            created_at text,
+            updated_at text,
+            finished_at text,
+            error_message text,
+            metadata text default '{}',
+            unique(task_kind, target_domain, target_id)
+        )
+        """
+    )
+    _ensure_columns(
+        conn,
+        "memories",
+        {
+            "context_domain": "text default 'memory'",
+            "status": "text default 'active'",
+            "source_kind": "text default 'agent_note'",
+            "trust_level": "text default 'verified'",
+        },
+    )
+    _ensure_columns(
+        conn,
+        "file_references",
+        {
+            "asset_kind": "text",
+            "asset_key": "text",
+            "context_domain": "text default 'asset'",
+            "status": "text default 'active'",
+            "source_kind": "text default 'nas_reference'",
+            "trust_level": "text default 'unverified'",
+            "version_group_id": "text",
+            "analysis_status": "text default 'indexed'",
+            "last_seen_at": "text",
+            "missing_since": "text",
+            "content_changed_at": "text",
+            "derived_artifacts": "text default '{}'",
+        },
+    )
+    _ensure_columns(
+        conn,
+        "assets",
+        {
+            "analysis_status": "text default 'indexed'",
+            "updated_by": "text",
+        },
+    )
+    _ensure_indexes(conn)
     conn.commit()
     conn.close()
 
@@ -146,6 +446,59 @@ def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str
     for name, definition in columns.items():
         if name not in existing:
             conn.execute(f"alter table {table} add column {name} {definition}")
+
+
+def _ensure_indexes(conn: sqlite3.Connection) -> None:
+    indexes = [
+        "create index if not exists idx_assets_asset_key on assets(asset_key)",
+        "create index if not exists idx_assets_status on assets(status)",
+        "create index if not exists idx_assets_kind on assets(asset_kind)",
+        "create index if not exists idx_assets_trust on assets(trust_level)",
+        "create index if not exists idx_memory_evidence_memory_id on memory_evidence(memory_id)",
+        "create index if not exists idx_memory_evidence_source on memory_evidence(source_domain, source_id)",
+        "create index if not exists idx_memory_promotions_status on memory_promotion_proposals(status)",
+        "create index if not exists idx_memory_promotions_session on memory_promotion_proposals(source_session_id)",
+        "create index if not exists idx_asset_locations_asset_id on asset_locations(asset_id)",
+        "create index if not exists idx_asset_locations_uri_normalized on asset_locations(uri_normalized)",
+        "create index if not exists idx_asset_locations_status on asset_locations(location_status)",
+        "create index if not exists idx_asset_versions_asset_id on asset_versions(asset_id)",
+        "create index if not exists idx_asset_versions_current on asset_versions(asset_id, is_current)",
+        "create index if not exists idx_asset_artifacts_asset_id on asset_artifacts(asset_id)",
+        "create index if not exists idx_asset_artifacts_version_id on asset_artifacts(version_id)",
+        "create index if not exists idx_asset_scan_runs_scope on asset_scan_runs(scope_prefix)",
+        "create index if not exists idx_audit_logs_target on audit_logs(target_type, target_id)",
+        "create index if not exists idx_agent_sessions_status on agent_sessions(status)",
+        "create index if not exists idx_agent_sessions_project_path on agent_sessions(project_path)",
+        "create index if not exists idx_agent_sessions_last_activity on agent_sessions(last_activity_at)",
+        "create index if not exists idx_session_events_session_id on session_events(session_id)",
+        "create index if not exists idx_session_events_type on session_events(event_type)",
+        "create index if not exists idx_session_traces_session_id on session_traces(session_id)",
+        "create index if not exists idx_session_summaries_session_id on session_summaries(session_id)",
+        "create index if not exists idx_session_model_usage_session_id on session_model_usage(session_id)",
+        "create index if not exists idx_improvement_tasks_status on improvement_tasks(status)",
+        "create index if not exists idx_improvement_tasks_target on improvement_tasks(target_domain, target_id)",
+    ]
+    for statement in indexes:
+        conn.execute(statement)
+
+
+def _json_loads(value: str | None, fallback):
+    if not value:
+        return fallback
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return fallback
+
+
+def _hash_text(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _normalize_uri(uri: str) -> str:
+    return uri.strip().replace("\\", "/")
 
 
 def _conn() -> sqlite3.Connection:
@@ -166,12 +519,26 @@ def db_counts() -> dict[str, int]:
         "chunks",
         "memories",
         "memory_versions",
+        "memory_evidence",
+        "memory_promotion_proposals",
         "audit_logs",
         "captures",
         "feeds",
         "feed_items",
         "crawl_jobs",
         "crawl_job_items",
+        "file_references",
+        "assets",
+        "asset_locations",
+        "asset_versions",
+        "asset_artifacts",
+        "asset_scan_runs",
+        "agent_sessions",
+        "session_events",
+        "session_traces",
+        "session_summaries",
+        "session_model_usage",
+        "improvement_tasks",
     ]
     with _conn() as conn:
         return {table: int(conn.execute(f"select count(*) from {table}").fetchone()[0]) for table in tables}
@@ -232,6 +599,1148 @@ class ChunksRepo:
             )
 
 
+class FileReferencesRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into file_references(
+                    id, uri, title, media_type, asset_kind, asset_key, size_bytes,
+                    checksum, summary, tags, storage_mode, context_domain, status,
+                    source_kind, trust_level, version_group_id, analysis_status,
+                    last_seen_at, missing_since, content_changed_at, derived_artifacts,
+                    metadata, created_at, updated_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(uri) do update set
+                    title=excluded.title,
+                    media_type=excluded.media_type,
+                    asset_kind=excluded.asset_kind,
+                    asset_key=excluded.asset_key,
+                    size_bytes=excluded.size_bytes,
+                    checksum=excluded.checksum,
+                    summary=excluded.summary,
+                    tags=excluded.tags,
+                    storage_mode=excluded.storage_mode,
+                    context_domain=excluded.context_domain,
+                    status=excluded.status,
+                    source_kind=excluded.source_kind,
+                    trust_level=excluded.trust_level,
+                    version_group_id=excluded.version_group_id,
+                    analysis_status=excluded.analysis_status,
+                    last_seen_at=excluded.last_seen_at,
+                    missing_since=excluded.missing_since,
+                    content_changed_at=excluded.content_changed_at,
+                    derived_artifacts=excluded.derived_artifacts,
+                    metadata=excluded.metadata,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    row["id"],
+                    row.get("uri"),
+                    row.get("title"),
+                    row.get("media_type"),
+                    row.get("asset_kind"),
+                    row.get("asset_key"),
+                    row.get("size_bytes"),
+                    row.get("checksum"),
+                    row.get("summary"),
+                    ",".join(row.get("tags", [])),
+                    row.get("storage_mode") or "referenced",
+                    row.get("context_domain") or "asset",
+                    row.get("status") or "active",
+                    row.get("source_kind") or "nas_reference",
+                    row.get("trust_level") or "unverified",
+                    row.get("version_group_id"),
+                    row.get("analysis_status") or "indexed",
+                    row.get("last_seen_at"),
+                    row.get("missing_since"),
+                    row.get("content_changed_at"),
+                    json.dumps(row.get("derived_artifacts") or {}, ensure_ascii=False),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                ),
+            )
+
+    def get_by_uri(self, uri: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, uri, title, media_type, asset_kind, asset_key, size_bytes,
+                       checksum, summary, tags, storage_mode, context_domain, status,
+                       source_kind, trust_level, version_group_id, analysis_status,
+                       last_seen_at, missing_since, content_changed_at, derived_artifacts,
+                       metadata, created_at, updated_at
+                from file_references
+                where uri = ?
+                """,
+                (uri,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def get(self, file_reference_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, uri, title, media_type, asset_kind, asset_key, size_bytes,
+                       checksum, summary, tags, storage_mode, context_domain, status,
+                       source_kind, trust_level, version_group_id, analysis_status,
+                       last_seen_at, missing_since, content_changed_at, derived_artifacts,
+                       metadata, created_at, updated_at
+                from file_references
+                where id = ?
+                """,
+                (file_reference_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_recent(
+        self,
+        limit: int = 100,
+        status: str | None = None,
+        media_type: str | None = None,
+        asset_kind: str | None = None,
+        trust_level: str | None = None,
+    ) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if media_type:
+            where.append("media_type = ?")
+            params.append(media_type)
+        if asset_kind:
+            where.append("asset_kind = ?")
+            params.append(asset_kind)
+        if trust_level:
+            where.append("trust_level = ?")
+            params.append(trust_level)
+        query = """
+                select id, uri, title, media_type, asset_kind, asset_key, size_bytes,
+                       checksum, summary, tags, storage_mode, context_domain, status,
+                       source_kind, trust_level, version_group_id, analysis_status,
+                       last_seen_at, missing_since, content_changed_at, derived_artifacts,
+                       metadata, created_at, updated_at
+                from file_references
+                """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by updated_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        try:
+            derived_artifacts = json.loads(row[20] or "{}")
+        except json.JSONDecodeError:
+            derived_artifacts = {}
+        try:
+            metadata = json.loads(row[21] or "{}")
+        except json.JSONDecodeError:
+            metadata = {}
+        return {
+            "id": row[0],
+            "uri": row[1],
+            "title": row[2],
+            "media_type": row[3],
+            "asset_kind": row[4],
+            "asset_key": row[5],
+            "size_bytes": row[6],
+            "checksum": row[7],
+            "summary": row[8],
+            "tags": [tag for tag in (row[9] or "").split(",") if tag],
+            "storage_mode": row[10] or "referenced",
+            "context_domain": row[11] or "asset",
+            "status": row[12] or "active",
+            "source_kind": row[13] or "nas_reference",
+            "trust_level": row[14] or "unverified",
+            "version_group_id": row[15],
+            "analysis_status": row[16] or "indexed",
+            "last_seen_at": row[17],
+            "missing_since": row[18],
+            "content_changed_at": row[19],
+            "derived_artifacts": derived_artifacts,
+            "metadata": metadata,
+            "created_at": row[22],
+            "updated_at": row[23],
+        }
+
+    def status_counts(self) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(status, 'active'), coalesce(analysis_status, 'indexed'),
+                       coalesce(trust_level, 'unverified'), count(*)
+                from file_references
+                group by coalesce(status, 'active'), coalesce(analysis_status, 'indexed'),
+                         coalesce(trust_level, 'unverified')
+                order by count(*) desc
+                """
+            ).fetchall()
+        return [
+            {
+                "status": row[0],
+                "analysis_status": row[1],
+                "trust_level": row[2],
+                "count": row[3],
+            }
+            for row in rows
+        ]
+
+    def duplicate_assets(self, limit: int = 50) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(asset_key, checksum), count(*) as duplicate_count,
+                       group_concat(id), group_concat(uri), max(updated_at)
+                from file_references
+                where coalesce(asset_key, checksum, '') != ''
+                group by coalesce(asset_key, checksum)
+                having count(*) > 1
+                order by duplicate_count desc, max(updated_at) desc
+                limit ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "asset_key": row[0],
+                "duplicate_count": row[1],
+                "ids": [item for item in (row[2] or "").split(",") if item],
+                "uris": [item for item in (row[3] or "").split(",") if item],
+                "last_updated_at": row[4],
+            }
+            for row in rows
+        ]
+
+
+class AssetsRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into assets(
+                    id, asset_key, asset_kind, title, summary, tags, media_type, status,
+                    trust_level, source_kind, analysis_status, created_by, updated_by,
+                    confirmed_by, created_at, updated_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    asset_key=coalesce(excluded.asset_key, assets.asset_key),
+                    asset_kind=coalesce(excluded.asset_kind, assets.asset_kind),
+                    title=coalesce(excluded.title, assets.title),
+                    summary=coalesce(excluded.summary, assets.summary),
+                    tags=coalesce(excluded.tags, assets.tags),
+                    media_type=coalesce(excluded.media_type, assets.media_type),
+                    status=coalesce(excluded.status, assets.status),
+                    trust_level=coalesce(excluded.trust_level, assets.trust_level),
+                    source_kind=coalesce(excluded.source_kind, assets.source_kind),
+                    analysis_status=coalesce(excluded.analysis_status, assets.analysis_status),
+                    updated_by=coalesce(excluded.updated_by, assets.updated_by),
+                    confirmed_by=coalesce(excluded.confirmed_by, assets.confirmed_by),
+                    updated_at=excluded.updated_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("asset_key"),
+                    row.get("asset_kind"),
+                    row.get("title"),
+                    row.get("summary"),
+                    ",".join(row.get("tags", [])) if isinstance(row.get("tags"), list) else row.get("tags"),
+                    row.get("media_type"),
+                    row.get("status") or "active",
+                    row.get("trust_level") or "unverified",
+                    row.get("source_kind") or "nas_reference",
+                    row.get("analysis_status") or "indexed",
+                    row.get("created_by"),
+                    row.get("updated_by"),
+                    row.get("confirmed_by"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def get(self, asset_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, asset_key, asset_kind, title, summary, tags, media_type, status,
+                       trust_level, source_kind, analysis_status, created_by, updated_by,
+                       confirmed_by, created_at, updated_at, metadata
+                from assets
+                where id = ?
+                """,
+                (asset_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def get_by_legacy_file_reference_id(self, file_reference_id: str) -> dict | None:
+        with _conn() as conn:
+            uri_row = conn.execute("select uri from file_references where id = ?", (file_reference_id,)).fetchone()
+            if not uri_row:
+                return None
+            location_row = conn.execute("select asset_id from asset_locations where uri = ?", (uri_row[0],)).fetchone()
+        if not location_row:
+            return None
+        return self.get(location_row[0])
+
+    def list_recent(
+        self,
+        limit: int = 100,
+        status: str | None = None,
+        asset_kind: str | None = None,
+        trust_level: str | None = None,
+    ) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if asset_kind:
+            where.append("asset_kind = ?")
+            params.append(asset_kind)
+        if trust_level:
+            where.append("trust_level = ?")
+            params.append(trust_level)
+        query = """
+            select id, asset_key, asset_kind, title, summary, tags, media_type, status,
+                   trust_level, source_kind, analysis_status, created_by, updated_by,
+                   confirmed_by, created_at, updated_at, metadata
+            from assets
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by updated_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def status_counts(self) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(status, 'active'), coalesce(analysis_status, 'indexed'),
+                       coalesce(trust_level, 'unverified'), count(*)
+                from assets
+                group by coalesce(status, 'active'), coalesce(analysis_status, 'indexed'),
+                         coalesce(trust_level, 'unverified')
+                order by count(*) desc
+                """
+            ).fetchall()
+        return [
+            {
+                "status": row[0],
+                "analysis_status": row[1],
+                "trust_level": row[2],
+                "count": row[3],
+            }
+            for row in rows
+        ]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "asset_key": row[1],
+            "asset_kind": row[2],
+            "title": row[3],
+            "summary": row[4] or "",
+            "tags": [tag for tag in (row[5] or "").split(",") if tag],
+            "media_type": row[6],
+            "status": row[7] or "active",
+            "trust_level": row[8] or "unverified",
+            "source_kind": row[9] or "nas_reference",
+            "analysis_status": row[10] or "indexed",
+            "created_by": row[11],
+            "updated_by": row[12],
+            "confirmed_by": row[13],
+            "created_at": row[14],
+            "updated_at": row[15],
+            "metadata": _json_loads(row[16], {}),
+        }
+
+
+class AssetLocationsRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into asset_locations(
+                    id, asset_id, uri, uri_normalized, storage_mode, location_status,
+                    last_seen_at, missing_since, forbidden_since, created_at, updated_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(uri) do update set
+                    asset_id=excluded.asset_id,
+                    uri_normalized=excluded.uri_normalized,
+                    storage_mode=excluded.storage_mode,
+                    location_status=excluded.location_status,
+                    last_seen_at=excluded.last_seen_at,
+                    missing_since=excluded.missing_since,
+                    forbidden_since=excluded.forbidden_since,
+                    updated_at=excluded.updated_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("asset_id"),
+                    row.get("uri"),
+                    row.get("uri_normalized"),
+                    row.get("storage_mode") or "referenced",
+                    row.get("location_status") or "active",
+                    row.get("last_seen_at"),
+                    row.get("missing_since"),
+                    row.get("forbidden_since"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def list_by_asset(self, asset_id: str) -> list[dict]:
+        return self._query("where asset_id = ?", [asset_id])
+
+    def get_by_uri(self, uri: str) -> dict | None:
+        rows = self._query("where uri = ?", [uri])
+        return rows[0] if rows else None
+
+    def list_by_scope(self, scope_prefix: str) -> list[dict]:
+        return self._query("where uri_normalized like ?", [f"{scope_prefix.rstrip('/')}%"])
+
+    def mark_missing_not_observed(self, scope_prefix: str, observed_uris: set[str], missing_since: str) -> int:
+        rows = self.list_by_scope(scope_prefix)
+        changed = 0
+        for row in rows:
+            if row["uri_normalized"] in observed_uris:
+                continue
+            row["location_status"] = "missing"
+            row["missing_since"] = row.get("missing_since") or missing_since
+            row["updated_at"] = missing_since
+            self.upsert(row)
+            changed += 1
+        return changed
+
+    def _query(self, where: str, params: list) -> list[dict]:
+        query = f"""
+            select id, asset_id, uri, uri_normalized, storage_mode, location_status,
+                   last_seen_at, missing_since, forbidden_since, created_at, updated_at, metadata
+            from asset_locations
+            {where}
+            order by updated_at desc, rowid desc
+        """
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "asset_id": row[1],
+            "uri": row[2],
+            "uri_normalized": row[3],
+            "storage_mode": row[4] or "referenced",
+            "location_status": row[5] or "active",
+            "last_seen_at": row[6],
+            "missing_since": row[7],
+            "forbidden_since": row[8],
+            "created_at": row[9],
+            "updated_at": row[10],
+            "metadata": _json_loads(row[11], {}),
+        }
+
+
+class AssetVersionsRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into asset_versions(
+                    id, asset_id, version_group_id, checksum, size_bytes, modified_at,
+                    content_signature, version_status, is_current, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    version_group_id=excluded.version_group_id,
+                    checksum=excluded.checksum,
+                    size_bytes=excluded.size_bytes,
+                    modified_at=excluded.modified_at,
+                    content_signature=excluded.content_signature,
+                    version_status=excluded.version_status,
+                    is_current=excluded.is_current,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("asset_id"),
+                    row.get("version_group_id"),
+                    row.get("checksum"),
+                    row.get("size_bytes"),
+                    row.get("modified_at"),
+                    row.get("content_signature"),
+                    row.get("version_status") or "current",
+                    1 if row.get("is_current", True) else 0,
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def supersede_current(self, asset_id: str) -> None:
+        with _conn() as conn:
+            conn.execute(
+                "update asset_versions set version_status = 'superseded', is_current = 0 where asset_id = ? and is_current = 1",
+                (asset_id,),
+            )
+
+    def get_current(self, asset_id: str) -> dict | None:
+        rows = self.list_by_asset(asset_id)
+        for row in rows:
+            if row["is_current"]:
+                return row
+        return None
+
+    def list_by_asset(self, asset_id: str) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, asset_id, version_group_id, checksum, size_bytes, modified_at,
+                       content_signature, version_status, is_current, created_at, metadata
+                from asset_versions
+                where asset_id = ?
+                order by is_current desc, created_at desc, rowid desc
+                """,
+                (asset_id,),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "asset_id": row[1],
+            "version_group_id": row[2],
+            "checksum": row[3],
+            "size_bytes": row[4],
+            "modified_at": row[5],
+            "content_signature": row[6],
+            "version_status": row[7] or "current",
+            "is_current": bool(row[8]),
+            "created_at": row[9],
+            "metadata": _json_loads(row[10], {}),
+        }
+
+
+class AssetArtifactsRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into asset_artifacts(
+                    id, asset_id, version_id, artifact_kind, artifact_uri, media_type,
+                    checksum, status, generated_by, created_at, updated_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    artifact_uri=coalesce(excluded.artifact_uri, asset_artifacts.artifact_uri),
+                    media_type=coalesce(excluded.media_type, asset_artifacts.media_type),
+                    checksum=coalesce(excluded.checksum, asset_artifacts.checksum),
+                    status=coalesce(excluded.status, asset_artifacts.status),
+                    generated_by=coalesce(excluded.generated_by, asset_artifacts.generated_by),
+                    updated_at=excluded.updated_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("asset_id"),
+                    row.get("version_id"),
+                    row.get("artifact_kind"),
+                    row.get("artifact_uri"),
+                    row.get("media_type"),
+                    row.get("checksum"),
+                    row.get("status") or "pending",
+                    row.get("generated_by"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def stale_for_old_versions(self, asset_id: str, current_version_id: str | None, updated_at: str) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                update asset_artifacts
+                set status = 'stale', updated_at = ?
+                where asset_id = ? and status in ('pending', 'ready') and coalesce(version_id, '') != coalesce(?, '')
+                """,
+                (updated_at, asset_id, current_version_id),
+            )
+
+    def get(self, artifact_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, asset_id, version_id, artifact_kind, artifact_uri, media_type,
+                       checksum, status, generated_by, created_at, updated_at, metadata
+                from asset_artifacts where id = ?
+                """,
+                (artifact_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_by_asset(self, asset_id: str) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, asset_id, version_id, artifact_kind, artifact_uri, media_type,
+                       checksum, status, generated_by, created_at, updated_at, metadata
+                from asset_artifacts
+                where asset_id = ?
+                order by updated_at desc, rowid desc
+                """,
+                (asset_id,),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "asset_id": row[1],
+            "version_id": row[2],
+            "artifact_kind": row[3],
+            "artifact_uri": row[4],
+            "media_type": row[5],
+            "checksum": row[6],
+            "status": row[7] or "pending",
+            "generated_by": row[8],
+            "created_at": row[9],
+            "updated_at": row[10],
+            "metadata": _json_loads(row[11], {}),
+        }
+
+
+class AssetScanRunsRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert or replace into asset_scan_runs(
+                    id, scope_prefix, status, observed_count, created_by,
+                    started_at, finished_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row.get("scope_prefix"),
+                    row.get("status"),
+                    row.get("observed_count", 0),
+                    row.get("created_by"),
+                    row.get("started_at"),
+                    row.get("finished_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def get(self, scan_run_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, scope_prefix, status, observed_count, created_by,
+                       started_at, finished_at, metadata
+                from asset_scan_runs where id = ?
+                """,
+                (scan_run_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "scope_prefix": row[1],
+            "status": row[2],
+            "observed_count": row[3],
+            "created_by": row[4],
+            "started_at": row[5],
+            "finished_at": row[6],
+            "metadata": _json_loads(row[7], {}),
+        }
+
+
+class AgentSessionsRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into agent_sessions(
+                    id, source_agent, project_path, status, title, summary,
+                    started_at, last_activity_at, ended_at, created_by, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    source_agent=coalesce(excluded.source_agent, agent_sessions.source_agent),
+                    project_path=coalesce(excluded.project_path, agent_sessions.project_path),
+                    status=coalesce(excluded.status, agent_sessions.status),
+                    title=coalesce(excluded.title, agent_sessions.title),
+                    summary=coalesce(excluded.summary, agent_sessions.summary),
+                    last_activity_at=coalesce(excluded.last_activity_at, agent_sessions.last_activity_at),
+                    ended_at=coalesce(excluded.ended_at, agent_sessions.ended_at),
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("source_agent"),
+                    row.get("project_path"),
+                    row.get("status") or "running",
+                    row.get("title"),
+                    row.get("summary"),
+                    row.get("started_at"),
+                    row.get("last_activity_at"),
+                    row.get("ended_at"),
+                    row.get("created_by"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def get(self, session_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, source_agent, project_path, status, title, summary,
+                       started_at, last_activity_at, ended_at, created_by, metadata
+                from agent_sessions
+                where id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_recent(
+        self,
+        limit: int = 100,
+        status: str | None = None,
+        source_agent: str | None = None,
+        project_path: str | None = None,
+    ) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if source_agent:
+            where.append("source_agent = ?")
+            params.append(source_agent)
+        if project_path:
+            where.append("project_path = ?")
+            params.append(project_path)
+        query = """
+            select id, source_agent, project_path, status, title, summary,
+                   started_at, last_activity_at, ended_at, created_by, metadata
+            from agent_sessions
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by last_activity_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def touch(self, session_id: str, last_activity_at: str) -> None:
+        with _conn() as conn:
+            conn.execute(
+                "update agent_sessions set last_activity_at = ? where id = ?",
+                (last_activity_at, session_id),
+            )
+
+    def status_counts(self) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(status, 'running'), coalesce(source_agent, ''), count(*)
+                from agent_sessions
+                group by coalesce(status, 'running'), coalesce(source_agent, '')
+                order by count(*) desc
+                """
+            ).fetchall()
+        return [{"status": row[0], "source_agent": row[1], "count": row[2]} for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "source_agent": row[1],
+            "project_path": row[2],
+            "status": row[3] or "running",
+            "title": row[4],
+            "summary": row[5] or "",
+            "started_at": row[6],
+            "last_activity_at": row[7],
+            "ended_at": row[8],
+            "created_by": row[9],
+            "metadata": _json_loads(row[10], {}),
+        }
+
+
+class SessionEventsRepo:
+    def insert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert or replace into session_events(
+                    id, session_id, event_type, role, content, tool_name,
+                    tool_args, tool_result, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row.get("session_id"),
+                    row.get("event_type"),
+                    row.get("role"),
+                    row.get("content"),
+                    row.get("tool_name"),
+                    json.dumps(row.get("tool_args") or {}, ensure_ascii=False),
+                    row.get("tool_result"),
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def list_by_session(self, session_id: str, limit: int = 100) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, session_id, event_type, role, content, tool_name,
+                       tool_args, tool_result, created_at, metadata
+                from session_events
+                where session_id = ?
+                order by created_at desc, rowid desc
+                limit ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "session_id": row[1],
+            "event_type": row[2],
+            "role": row[3],
+            "content": row[4] or "",
+            "tool_name": row[5],
+            "tool_args": _json_loads(row[6], {}),
+            "tool_result": row[7],
+            "created_at": row[8],
+            "metadata": _json_loads(row[9], {}),
+        }
+
+
+class SessionTracesRepo:
+    def insert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert or replace into session_traces(
+                    id, session_id, trace_id, origin_function, status, memory_query,
+                    memory_context, method_params, method_return_value, error_message,
+                    feedback_text, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row.get("session_id"),
+                    row.get("trace_id"),
+                    row.get("origin_function"),
+                    row.get("status"),
+                    row.get("memory_query"),
+                    row.get("memory_context"),
+                    json.dumps(row.get("method_params") or {}, ensure_ascii=False),
+                    json.dumps(row.get("method_return_value"), ensure_ascii=False),
+                    row.get("error_message"),
+                    row.get("feedback_text"),
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def list_by_session(self, session_id: str, limit: int = 100) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, session_id, trace_id, origin_function, status, memory_query,
+                       memory_context, method_params, method_return_value, error_message,
+                       feedback_text, created_at, metadata
+                from session_traces
+                where session_id = ?
+                order by created_at desc, rowid desc
+                limit ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "session_id": row[1],
+            "trace_id": row[2],
+            "origin_function": row[3],
+            "status": row[4],
+            "memory_query": row[5] or "",
+            "memory_context": row[6] or "",
+            "method_params": _json_loads(row[7], {}),
+            "method_return_value": _json_loads(row[8], None),
+            "error_message": row[9] or "",
+            "feedback_text": row[10] or "",
+            "created_at": row[11],
+            "metadata": _json_loads(row[12], {}),
+        }
+
+
+class SessionSummariesRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert or replace into session_summaries(
+                    id, session_id, summary_kind, content, status, created_by, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row.get("session_id"),
+                    row.get("summary_kind"),
+                    row.get("content"),
+                    row.get("status") or "active",
+                    row.get("created_by"),
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def list_by_session(self, session_id: str, limit: int = 20) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, session_id, summary_kind, content, status, created_by, created_at, metadata
+                from session_summaries
+                where session_id = ?
+                order by created_at desc, rowid desc
+                limit ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "session_id": row[1],
+            "summary_kind": row[2],
+            "content": row[3] or "",
+            "status": row[4] or "active",
+            "created_by": row[5],
+            "created_at": row[6],
+            "metadata": _json_loads(row[7], {}),
+        }
+
+
+class SessionModelUsageRepo:
+    def upsert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert or replace into session_model_usage(
+                    id, session_id, model, tokens_in, tokens_out, cost_usd, updated_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row.get("session_id"),
+                    row.get("model"),
+                    row.get("tokens_in", 0),
+                    row.get("tokens_out", 0),
+                    row.get("cost_usd", 0),
+                    row.get("updated_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def list_by_session(self, session_id: str) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, session_id, model, tokens_in, tokens_out, cost_usd, updated_at, metadata
+                from session_model_usage
+                where session_id = ?
+                order by updated_at desc, rowid desc
+                """,
+                (session_id,),
+            ).fetchall()
+        return [
+            {
+                "id": row[0],
+                "session_id": row[1],
+                "model": row[2],
+                "tokens_in": row[3],
+                "tokens_out": row[4],
+                "cost_usd": row[5],
+                "updated_at": row[6],
+                "metadata": _json_loads(row[7], {}),
+            }
+            for row in rows
+        ]
+
+
+class ImprovementTasksRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into improvement_tasks(
+                    id, task_kind, target_domain, target_id, status, priority, reason,
+                    created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(task_kind, target_domain, target_id) do update set
+                    status=case
+                        when improvement_tasks.status in ('done', 'running') then improvement_tasks.status
+                        else excluded.status
+                    end,
+                    priority=min(improvement_tasks.priority, excluded.priority),
+                    reason=coalesce(excluded.reason, improvement_tasks.reason),
+                    updated_at=excluded.updated_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("task_kind"),
+                    row.get("target_domain"),
+                    row.get("target_id"),
+                    row.get("status") or "pending",
+                    row.get("priority", 50),
+                    row.get("reason"),
+                    row.get("created_by"),
+                    row.get("claimed_by"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    row.get("finished_at"),
+                    row.get("error_message"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+            saved = conn.execute(
+                """
+                select id, task_kind, target_domain, target_id, status, priority, reason,
+                       created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
+                from improvement_tasks
+                where task_kind = ? and target_domain = ? and target_id = ?
+                """,
+                (row.get("task_kind"), row.get("target_domain"), row.get("target_id")),
+            ).fetchone()
+        return self._decode(saved)
+
+    def get(self, task_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, task_kind, target_domain, target_id, status, priority, reason,
+                       created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
+                from improvement_tasks
+                where id = ?
+                """,
+                (task_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def update(self, task_id: str, changes: dict) -> dict | None:
+        current = self.get(task_id)
+        if not current:
+            return None
+        updated = {**current, **{key: value for key, value in changes.items() if value is not None}}
+        with _conn() as conn:
+            conn.execute(
+                """
+                update improvement_tasks
+                set status = ?, priority = ?, reason = ?, claimed_by = ?, updated_at = ?,
+                    finished_at = ?, error_message = ?, metadata = ?
+                where id = ?
+                """,
+                (
+                    updated.get("status"),
+                    updated.get("priority"),
+                    updated.get("reason"),
+                    updated.get("claimed_by"),
+                    updated.get("updated_at"),
+                    updated.get("finished_at"),
+                    updated.get("error_message"),
+                    json.dumps(updated.get("metadata") or {}, ensure_ascii=False),
+                    task_id,
+                ),
+            )
+        return self.get(task_id)
+
+    def list_recent(
+        self,
+        limit: int = 100,
+        status: str | None = None,
+        task_kind: str | None = None,
+        target_domain: str | None = None,
+        target_id: str | None = None,
+    ) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if task_kind:
+            where.append("task_kind = ?")
+            params.append(task_kind)
+        if target_domain:
+            where.append("target_domain = ?")
+            params.append(target_domain)
+        if target_id:
+            where.append("target_id = ?")
+            params.append(target_id)
+        query = """
+            select id, task_kind, target_domain, target_id, status, priority, reason,
+                   created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
+            from improvement_tasks
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by priority asc, updated_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def status_counts(self) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(status, 'pending'), coalesce(task_kind, ''), count(*)
+                from improvement_tasks
+                group by coalesce(status, 'pending'), coalesce(task_kind, '')
+                order by count(*) desc
+                """
+            ).fetchall()
+        return [{"status": row[0], "task_kind": row[1], "count": row[2]} for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "task_kind": row[1],
+            "target_domain": row[2],
+            "target_id": row[3],
+            "status": row[4] or "pending",
+            "priority": row[5],
+            "reason": row[6],
+            "created_by": row[7],
+            "claimed_by": row[8],
+            "created_at": row[9],
+            "updated_at": row[10],
+            "finished_at": row[11],
+            "error_message": row[12],
+            "metadata": _json_loads(row[13], {}),
+        }
+
+
 class MemoriesRepo:
     def upsert(self, row: dict) -> None:
         with _conn() as conn:
@@ -239,8 +1748,9 @@ class MemoriesRepo:
                 """
                 insert or replace into memories(
                     id, content, tags, user_id, agent_id, session_id, conversation_id,
-                    memory_type, metadata, created_at, updated_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    memory_type, context_domain, status, source_kind, trust_level,
+                    metadata, created_at, updated_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row["id"],
@@ -251,6 +1761,10 @@ class MemoriesRepo:
                     row.get("session_id"),
                     row.get("conversation_id"),
                     row.get("memory_type") or "long_term",
+                    row.get("context_domain") or "memory",
+                    row.get("status") or "active",
+                    row.get("source_kind") or "agent_note",
+                    row.get("trust_level") or "verified",
                     json.dumps(row.get("metadata") or {}, ensure_ascii=False),
                     row.get("created_at"),
                     row.get("updated_at"),
@@ -262,7 +1776,8 @@ class MemoriesRepo:
             rows = conn.execute(
                 """
                 select id, content, tags, user_id, agent_id, session_id, conversation_id,
-                       memory_type, metadata, created_at, updated_at
+                       memory_type, context_domain, status, source_kind, trust_level,
+                       metadata, created_at, updated_at
                 from memories
                 where id = ?
                 """,
@@ -292,7 +1807,8 @@ class MemoriesRepo:
             params.append(memory_type)
         query = """
             select id, content, tags, user_id, agent_id, session_id, conversation_id,
-                   memory_type, metadata, created_at, updated_at
+                   memory_type, context_domain, status, source_kind, trust_level,
+                   metadata, created_at, updated_at
             from memories
         """
         if where:
@@ -345,7 +1861,7 @@ class MemoriesRepo:
 
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         try:
-            metadata = json.loads(row[8] or "{}")
+            metadata = json.loads(row[12] or "{}")
         except json.JSONDecodeError:
             metadata = {}
         return {
@@ -357,9 +1873,13 @@ class MemoriesRepo:
             "session_id": row[5],
             "conversation_id": row[6],
             "memory_type": row[7] or "long_term",
+            "context_domain": row[8] or "memory",
+            "status": row[9] or "active",
+            "source_kind": row[10] or "agent_note",
+            "trust_level": row[11] or "verified",
             "metadata": metadata,
-            "created_at": row[9],
-            "updated_at": row[10],
+            "created_at": row[13],
+            "updated_at": row[14],
         }
 
 
@@ -419,6 +1939,187 @@ class MemoryVersionsRepo:
             }
             for r in rows
         ]
+
+
+class MemoryEvidenceRepo:
+    def insert(self, row: dict) -> None:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert or replace into memory_evidence(
+                    id, memory_id, source_domain, source_id, quote, confidence, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row.get("memory_id"),
+                    row.get("source_domain"),
+                    row.get("source_id"),
+                    row.get("quote"),
+                    row.get("confidence", 1.0),
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+
+    def list_by_memory(self, memory_id: str, limit: int = 50) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, memory_id, source_domain, source_id, quote, confidence, created_at, metadata
+                from memory_evidence
+                where memory_id = ?
+                order by created_at desc, rowid desc
+                limit ?
+                """,
+                (memory_id, limit),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def list_recent(self, limit: int = 100) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, memory_id, source_domain, source_id, quote, confidence, created_at, metadata
+                from memory_evidence
+                order by created_at desc, rowid desc
+                limit ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "memory_id": row[1],
+            "source_domain": row[2],
+            "source_id": row[3],
+            "quote": row[4] or "",
+            "confidence": row[5],
+            "created_at": row[6],
+            "metadata": _json_loads(row[7], {}),
+        }
+
+
+class MemoryPromotionProposalsRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into memory_promotion_proposals(
+                    id, source_session_id, source_event_ids, proposed_content, tags,
+                    memory_type, user_id, agent_id, project_path, status, reason,
+                    created_by, reviewed_by, created_at, updated_at, reviewed_at,
+                    promoted_memory_id, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    proposed_content=coalesce(excluded.proposed_content, memory_promotion_proposals.proposed_content),
+                    tags=coalesce(excluded.tags, memory_promotion_proposals.tags),
+                    memory_type=coalesce(excluded.memory_type, memory_promotion_proposals.memory_type),
+                    status=coalesce(excluded.status, memory_promotion_proposals.status),
+                    reason=coalesce(excluded.reason, memory_promotion_proposals.reason),
+                    reviewed_by=coalesce(excluded.reviewed_by, memory_promotion_proposals.reviewed_by),
+                    updated_at=excluded.updated_at,
+                    reviewed_at=coalesce(excluded.reviewed_at, memory_promotion_proposals.reviewed_at),
+                    promoted_memory_id=coalesce(excluded.promoted_memory_id, memory_promotion_proposals.promoted_memory_id),
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("source_session_id"),
+                    json.dumps(row.get("source_event_ids") or [], ensure_ascii=False),
+                    row.get("proposed_content"),
+                    ",".join(row.get("tags", [])),
+                    row.get("memory_type") or "long_term",
+                    row.get("user_id") or "default",
+                    row.get("agent_id"),
+                    row.get("project_path"),
+                    row.get("status") or "pending",
+                    row.get("reason"),
+                    row.get("created_by"),
+                    row.get("reviewed_by"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    row.get("reviewed_at"),
+                    row.get("promoted_memory_id"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(row["id"])
+
+    def get(self, proposal_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, source_session_id, source_event_ids, proposed_content, tags,
+                       memory_type, user_id, agent_id, project_path, status, reason,
+                       created_by, reviewed_by, created_at, updated_at, reviewed_at,
+                       promoted_memory_id, metadata
+                from memory_promotion_proposals
+                where id = ?
+                """,
+                (proposal_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_recent(self, limit: int = 100, status: str | None = None, source_session_id: str | None = None) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if source_session_id:
+            where.append("source_session_id = ?")
+            params.append(source_session_id)
+        query = """
+            select id, source_session_id, source_event_ids, proposed_content, tags,
+                   memory_type, user_id, agent_id, project_path, status, reason,
+                   created_by, reviewed_by, created_at, updated_at, reviewed_at,
+                   promoted_memory_id, metadata
+            from memory_promotion_proposals
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by updated_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def status_counts(self) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(status, 'pending'), coalesce(memory_type, 'long_term'), count(*)
+                from memory_promotion_proposals
+                group by coalesce(status, 'pending'), coalesce(memory_type, 'long_term')
+                order by count(*) desc
+                """
+            ).fetchall()
+        return [{"status": row[0], "memory_type": row[1], "count": row[2]} for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "source_session_id": row[1],
+            "source_event_ids": _json_loads(row[2], []),
+            "proposed_content": row[3] or "",
+            "tags": [tag for tag in (row[4] or "").split(",") if tag],
+            "memory_type": row[5] or "long_term",
+            "user_id": row[6] or "default",
+            "agent_id": row[7],
+            "project_path": row[8],
+            "status": row[9] or "pending",
+            "reason": row[10] or "",
+            "created_by": row[11],
+            "reviewed_by": row[12],
+            "created_at": row[13],
+            "updated_at": row[14],
+            "reviewed_at": row[15],
+            "promoted_memory_id": row[16],
+            "metadata": _json_loads(row[17], {}),
+        }
 
 
 class AuditLogsRepo:
@@ -729,12 +2430,68 @@ def chunks_repo() -> ChunksRepo:
     return ChunksRepo()
 
 
+def file_references_repo() -> FileReferencesRepo:
+    return FileReferencesRepo()
+
+
+def assets_repo() -> AssetsRepo:
+    return AssetsRepo()
+
+
+def asset_locations_repo() -> AssetLocationsRepo:
+    return AssetLocationsRepo()
+
+
+def asset_versions_repo() -> AssetVersionsRepo:
+    return AssetVersionsRepo()
+
+
+def asset_artifacts_repo() -> AssetArtifactsRepo:
+    return AssetArtifactsRepo()
+
+
+def asset_scan_runs_repo() -> AssetScanRunsRepo:
+    return AssetScanRunsRepo()
+
+
+def agent_sessions_repo() -> AgentSessionsRepo:
+    return AgentSessionsRepo()
+
+
+def session_events_repo() -> SessionEventsRepo:
+    return SessionEventsRepo()
+
+
+def session_traces_repo() -> SessionTracesRepo:
+    return SessionTracesRepo()
+
+
+def session_summaries_repo() -> SessionSummariesRepo:
+    return SessionSummariesRepo()
+
+
+def session_model_usage_repo() -> SessionModelUsageRepo:
+    return SessionModelUsageRepo()
+
+
+def improvement_tasks_repo() -> ImprovementTasksRepo:
+    return ImprovementTasksRepo()
+
+
 def memories_repo() -> MemoriesRepo:
     return MemoriesRepo()
 
 
 def memory_versions_repo() -> MemoryVersionsRepo:
     return MemoryVersionsRepo()
+
+
+def memory_evidence_repo() -> MemoryEvidenceRepo:
+    return MemoryEvidenceRepo()
+
+
+def memory_promotion_proposals_repo() -> MemoryPromotionProposalsRepo:
+    return MemoryPromotionProposalsRepo()
 
 
 def audit_logs_repo() -> AuditLogsRepo:

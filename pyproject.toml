@@ -17,6 +17,11 @@ dependencies = [
   "mcp>=1.0",
 ]
 
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0",
+]
+
 [project.scripts]
 gcd = "app.cli:main"
 gcd-mcp = "app.mcp_server:main"

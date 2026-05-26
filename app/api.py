@@ -14,29 +14,100 @@ from app.capture.service import (
 from app.core.auth import require_api_key
 from app.core.config import settings
 from app.core.schemas import (
+    AssetArtifactCreate,
+    AssetArtifactUpdate,
+    AssetAnalysisManifest,
+    AssetCreate,
+    AssetScanRunCreate,
+    AssetSearchRequest,
+    AssetUpdate,
     CrawlJobCreateRequest,
+    FileReferenceCreate,
+    FileReferenceUpdate,
     FeedCreateRequest,
+    ForgetRequest,
+    ImprovementTaskCreate,
+    ImprovementTaskUpdate,
+    ImproveRequest,
     IngestRequest,
     MemoryCreate,
+    MemoryEvidenceCreate,
+    MemoryPromotionCreate,
+    MemoryPromotionReview,
+    MemoryPromotionUpdate,
     MemoryUpdate,
+    RecallRequest,
+    RememberRequest,
+    ResumeContextRequest,
+    RetrievalEvalRequest,
     SearchRequest,
+    SessionCreate,
+    SessionEventCreate,
+    SessionModelUsageCreate,
+    SessionSummaryCreate,
+    SessionTraceCreate,
+    SessionUpdate,
     SnapshotCreateRequest,
     SnapshotRestoreRequest,
     UrlIngestRequest,
     WebCaptureRequest,
 )
+from app.assets.service import (
+    AssetPermissionError,
+    asset_maintenance_preflight,
+    create_asset,
+    fresh_install_preflight,
+    get_asset,
+    get_asset_scan_run,
+    list_asset_artifacts,
+    list_assets,
+    rebuild_asset_vectors,
+    register_asset_analysis_manifest,
+    register_asset_artifact,
+    run_asset_scan,
+    search_assets,
+    update_asset,
+    update_asset_artifact,
+)
+from app.files.service import add_file_reference, list_file_references, update_file_reference
 from app.governance.service import diagnostics
+from app.control.service import forget as control_forget
+from app.control.service import improve as control_improve
+from app.control.service import recall as control_recall
+from app.control.service import remember as control_remember
+from app.improvements.service import create_improvement_task, list_improvement_tasks, update_improvement_task
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
     add_memory,
+    add_memory_evidence,
+    create_memory_promotion,
     delete_memory,
     list_audit_logs,
+    list_memory_evidence,
+    list_memory_promotions,
     list_memories,
     list_memory_versions,
+    enqueue_memory_quality_improvements,
+    memory_quality_report,
+    review_memory_promotion,
     search_memory,
+    update_memory_promotion,
     update_memory,
 )
-from app.retrieval.service import search_context
+from app.retrieval.service import run_retrieval_eval, search_context
+from app.sessions.service import (
+    add_session_event,
+    add_session_model_usage,
+    add_session_summary,
+    add_session_trace,
+    create_session,
+    get_resume_context,
+    get_session,
+    list_session_events,
+    list_session_traces,
+    list_sessions,
+    update_session,
+)
 from app.storage.repo import documents_repo
 
 router = APIRouter()
@@ -109,6 +180,38 @@ def diagnostics_get() -> dict:
     return diagnostics()
 
 
+@router.post("/remember", dependencies=[Depends(require_api_key)])
+def remember_post(payload: RememberRequest) -> dict:
+    try:
+        return control_remember(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/recall")
+def recall_post(payload: RecallRequest) -> dict:
+    try:
+        return control_recall(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/forget", dependencies=[Depends(require_api_key)])
+def forget_post(payload: ForgetRequest) -> dict:
+    try:
+        return control_forget(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/improve", dependencies=[Depends(require_api_key)])
+def improve_post(payload: ImproveRequest) -> dict:
+    try:
+        return control_improve(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @router.post("/snapshots", dependencies=[Depends(require_api_key)])
 def snapshots_create(payload: SnapshotCreateRequest) -> dict:
     return export_snapshot(payload.label)
@@ -162,6 +265,353 @@ def documents() -> list[dict]:
         }
         for row in rows
     ]
+
+
+@router.post("/documents/search")
+def documents_search(payload: SearchRequest) -> dict:
+    return search_context(
+        payload.query,
+        payload.top_k,
+        kind="chunk",
+        mode="document_search",
+        legacy_flat=True,
+        context_budget_chars=payload.context_budget_chars,
+    )
+
+
+@router.post("/file-references", dependencies=[Depends(require_api_key)])
+def file_references_create(payload: FileReferenceCreate) -> dict:
+    try:
+        return add_file_reference(payload)
+    except AssetPermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/file-references")
+def file_references_list(
+    limit: int = 100,
+    status: str | None = None,
+    media_type: str | None = None,
+    asset_kind: str | None = None,
+    trust_level: str | None = None,
+) -> list[dict]:
+    return list_file_references(
+        limit,
+        status=status,
+        media_type=media_type,
+        asset_kind=asset_kind,
+        trust_level=trust_level,
+    )
+
+
+@router.patch("/file-references/{file_reference_id}", dependencies=[Depends(require_api_key)])
+def file_references_update(file_reference_id: str, payload: FileReferenceUpdate) -> dict:
+    try:
+        return update_file_reference(file_reference_id, payload)
+    except AssetPermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/assets", dependencies=[Depends(require_api_key)])
+def assets_create(payload: AssetCreate) -> dict:
+    try:
+        return create_asset(payload)
+    except AssetPermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/assets")
+def assets_list(
+    limit: int = 100,
+    status: str | None = None,
+    asset_kind: str | None = None,
+    trust_level: str | None = None,
+) -> list[dict]:
+    return list_assets(limit, status=status, asset_kind=asset_kind, trust_level=trust_level)
+
+
+@router.post("/assets/search")
+def assets_search(payload: AssetSearchRequest) -> dict:
+    return search_assets(payload)
+
+
+@router.post("/assets/maintenance/rebuild-vectors", dependencies=[Depends(require_api_key)])
+def assets_maintenance_rebuild_vectors(clean_legacy: bool = True) -> dict:
+    return rebuild_asset_vectors(clean_legacy=clean_legacy)
+
+
+@router.get("/assets/maintenance/preflight")
+def assets_maintenance_preflight() -> dict:
+    return asset_maintenance_preflight()
+
+
+@router.get("/assets/maintenance/fresh-install-preflight")
+def assets_maintenance_fresh_install_preflight() -> dict:
+    return fresh_install_preflight()
+
+
+@router.post("/sessions", dependencies=[Depends(require_api_key)])
+def sessions_create(payload: SessionCreate) -> dict:
+    try:
+        return create_session(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/sessions")
+def sessions_list(
+    limit: int = 100,
+    status: str | None = None,
+    source_agent: str | None = None,
+    project_path: str | None = None,
+) -> list[dict]:
+    return list_sessions(limit=limit, status=status, source_agent=source_agent, project_path=project_path)
+
+
+@router.get("/sessions/{session_id}")
+def sessions_get(session_id: str) -> dict:
+    try:
+        return get_session(session_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.patch("/sessions/{session_id}", dependencies=[Depends(require_api_key)])
+def sessions_update(session_id: str, payload: SessionUpdate) -> dict:
+    try:
+        return update_session(session_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/sessions/{session_id}/events", dependencies=[Depends(require_api_key)])
+def sessions_events_create(session_id: str, payload: SessionEventCreate) -> dict:
+    try:
+        return add_session_event(session_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/sessions/{session_id}/events")
+def sessions_events_list(session_id: str, limit: int = 100) -> list[dict]:
+    try:
+        return list_session_events(session_id, limit)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/sessions/{session_id}/traces", dependencies=[Depends(require_api_key)])
+def sessions_traces_create(session_id: str, payload: SessionTraceCreate) -> dict:
+    try:
+        return add_session_trace(session_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/sessions/{session_id}/traces")
+def sessions_traces_list(session_id: str, limit: int = 100) -> list[dict]:
+    try:
+        return list_session_traces(session_id, limit)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/sessions/{session_id}/summaries", dependencies=[Depends(require_api_key)])
+def sessions_summaries_create(session_id: str, payload: SessionSummaryCreate) -> dict:
+    try:
+        return add_session_summary(session_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/sessions/{session_id}/model-usage", dependencies=[Depends(require_api_key)])
+def sessions_model_usage_create(session_id: str, payload: SessionModelUsageCreate) -> dict:
+    try:
+        return add_session_model_usage(session_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/sessions/{session_id}/resume-context")
+def sessions_resume_context_get(
+    session_id: str,
+    query: str | None = None,
+    top_k: int = 5,
+    include_raw_events: bool = True,
+    context_budget_chars: int = 12000,
+) -> dict:
+    try:
+        return get_resume_context(
+            ResumeContextRequest(
+                session_id=session_id,
+                query=query,
+                top_k=top_k,
+                include_raw_events=include_raw_events,
+                context_budget_chars=context_budget_chars,
+            )
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/context/resume")
+def context_resume(payload: ResumeContextRequest) -> dict:
+    try:
+        return get_resume_context(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/agent-hooks/session-start", dependencies=[Depends(require_api_key)])
+def agent_hook_session_start(payload: SessionCreate) -> dict:
+    return sessions_create(payload)
+
+
+@router.post("/agent-hooks/user-prompt", dependencies=[Depends(require_api_key)])
+def agent_hook_user_prompt(session_id: str, payload: SessionEventCreate) -> dict:
+    payload.event_type = "user_prompt"
+    return sessions_events_create(session_id, payload)
+
+
+@router.post("/agent-hooks/tool-use", dependencies=[Depends(require_api_key)])
+def agent_hook_tool_use(session_id: str, payload: SessionTraceCreate) -> dict:
+    return sessions_traces_create(session_id, payload)
+
+
+@router.post("/agent-hooks/pre-compact", dependencies=[Depends(require_api_key)])
+def agent_hook_pre_compact(session_id: str, payload: SessionEventCreate) -> dict:
+    payload.event_type = "pre_compact"
+    return sessions_events_create(session_id, payload)
+
+
+@router.post("/agent-hooks/session-end", dependencies=[Depends(require_api_key)])
+def agent_hook_session_end(session_id: str, payload: SessionUpdate | None = None) -> dict:
+    return sessions_update(session_id, payload or SessionUpdate(status="ended"))
+
+
+@router.post("/improvements", dependencies=[Depends(require_api_key)])
+def improvements_create(payload: ImprovementTaskCreate) -> dict:
+    try:
+        return create_improvement_task(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/improvements")
+def improvements_list(
+    limit: int = 100,
+    status: str | None = None,
+    task_kind: str | None = None,
+    target_domain: str | None = None,
+    target_id: str | None = None,
+) -> list[dict]:
+    return list_improvement_tasks(
+        limit=limit,
+        status=status,
+        task_kind=task_kind,
+        target_domain=target_domain,
+        target_id=target_id,
+    )
+
+
+@router.patch("/improvements/{task_id}", dependencies=[Depends(require_api_key)])
+def improvements_update(task_id: str, payload: ImprovementTaskUpdate) -> dict:
+    try:
+        return update_improvement_task(task_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/assets/scan-runs", dependencies=[Depends(require_api_key)])
+def assets_scan_runs_create(payload: AssetScanRunCreate) -> dict:
+    try:
+        return run_asset_scan(payload)
+    except AssetPermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/assets/scan-runs/{scan_run_id}")
+def assets_scan_runs_get(scan_run_id: str) -> dict:
+    try:
+        return get_asset_scan_run(scan_run_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/assets/{asset_id}")
+def assets_get(asset_id: str) -> dict:
+    try:
+        return get_asset(asset_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.patch("/assets/{asset_id}", dependencies=[Depends(require_api_key)])
+def assets_update(asset_id: str, payload: AssetUpdate) -> dict:
+    try:
+        return update_asset(asset_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/assets/{asset_id}/versions")
+def assets_versions(asset_id: str) -> list[dict]:
+    try:
+        return get_asset(asset_id)["versions"]
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/assets/{asset_id}/locations")
+def assets_locations(asset_id: str) -> list[dict]:
+    try:
+        return get_asset(asset_id)["locations"]
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/assets/{asset_id}/artifacts", dependencies=[Depends(require_api_key)])
+def assets_artifacts_create(asset_id: str, payload: AssetArtifactCreate) -> dict:
+    try:
+        return register_asset_artifact(asset_id, payload)
+    except AssetPermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/assets/{asset_id}/analysis-manifest", dependencies=[Depends(require_api_key)])
+def assets_analysis_manifest(asset_id: str, payload: AssetAnalysisManifest) -> dict:
+    try:
+        return register_asset_analysis_manifest(asset_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/assets/{asset_id}/artifacts")
+def assets_artifacts_list(asset_id: str) -> list[dict]:
+    try:
+        return list_asset_artifacts(asset_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.patch("/asset-artifacts/{artifact_id}", dependencies=[Depends(require_api_key)])
+def assets_artifacts_update(artifact_id: str, payload: AssetArtifactUpdate) -> dict:
+    try:
+        return update_asset_artifact(artifact_id, payload)
+    except AssetPermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @router.post("/captures/web", dependencies=[Depends(require_api_key)])
@@ -220,12 +670,55 @@ def crawl_jobs_get(job_id: str) -> dict:
 
 @router.post("/search")
 def search(payload: SearchRequest) -> dict:
-    return search_context(payload.query, payload.top_k)
+    return search_context(
+        payload.query,
+        payload.top_k,
+        context_domain=payload.context_domain,
+        kind=payload.kind,
+        mode=payload.mode,
+        legacy_flat=payload.legacy_flat,
+        context_budget_chars=payload.context_budget_chars,
+    )
+
+
+@router.post("/retrieval/eval")
+def retrieval_eval(payload: RetrievalEvalRequest) -> dict:
+    return run_retrieval_eval([case.model_dump() for case in payload.cases], top_k=payload.top_k)
 
 
 @router.post("/memories", dependencies=[Depends(require_api_key)])
 def memories(payload: MemoryCreate) -> dict:
     return add_memory(payload)
+
+
+@router.post("/memory-promotions", dependencies=[Depends(require_api_key)])
+def memory_promotions_create(payload: MemoryPromotionCreate) -> dict:
+    return create_memory_promotion(payload)
+
+
+@router.get("/memory-promotions")
+def memory_promotions_list(
+    limit: int = 100,
+    status: str | None = None,
+    source_session_id: str | None = None,
+) -> list[dict]:
+    return list_memory_promotions(limit=limit, status=status, source_session_id=source_session_id)
+
+
+@router.patch("/memory-promotions/{proposal_id}", dependencies=[Depends(require_api_key)])
+def memory_promotions_update(proposal_id: str, payload: MemoryPromotionUpdate) -> dict:
+    try:
+        return update_memory_promotion(proposal_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/memory-promotions/{proposal_id}/review", dependencies=[Depends(require_api_key)])
+def memory_promotions_review(proposal_id: str, payload: MemoryPromotionReview) -> dict:
+    try:
+        return review_memory_promotion(proposal_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.get("/memories")
@@ -249,6 +742,16 @@ def memories_search(
     return search_memory(q, top_k, user_id=user_id, agent_id=agent_id, memory_type=memory_type)
 
 
+@router.get("/memories/quality")
+def memories_quality(limit: int = 100) -> dict:
+    return memory_quality_report(limit)
+
+
+@router.post("/memories/quality/enqueue-improvements", dependencies=[Depends(require_api_key)])
+def memories_quality_enqueue(limit: int = 100, created_by: str | None = None) -> dict:
+    return enqueue_memory_quality_improvements(limit=limit, created_by=created_by)
+
+
 @router.patch("/memories/{memory_id}", dependencies=[Depends(require_api_key)])
 def memories_update(memory_id: str, payload: MemoryUpdate) -> dict:
     try:
@@ -265,6 +768,22 @@ def memories_delete(memory_id: str) -> dict:
 @router.get("/memories/{memory_id}/versions")
 def memories_versions(memory_id: str, limit: int = 20) -> list[dict]:
     return list_memory_versions(memory_id, limit)
+
+
+@router.post("/memories/{memory_id}/evidence", dependencies=[Depends(require_api_key)])
+def memories_evidence_create(memory_id: str, payload: MemoryEvidenceCreate) -> dict:
+    try:
+        return add_memory_evidence(memory_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/memories/{memory_id}/evidence")
+def memories_evidence_list(memory_id: str, limit: int = 50) -> list[dict]:
+    try:
+        return list_memory_evidence(memory_id, limit)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @router.get("/audit-logs")
