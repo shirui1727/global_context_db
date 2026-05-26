@@ -321,9 +321,9 @@ def add_session_model_usage(session_id: str, payload: SessionModelUsageCreate) -
 def get_resume_context(payload: ResumeContextRequest) -> dict:
     session = None
     if payload.session_id:
-        session = agent_sessions_repo().get(payload.session_id)
-        if not session:
+        if not agent_sessions_repo().get(payload.session_id):
             raise ValueError("session not found")
+        session = get_session(payload.session_id)
     project_path = payload.project_path or (session.get("project_path") if session else None)
     query = payload.query or (session.get("summary") if session else None) or project_path or ""
     recent_events = session_events_repo().list_by_session(session["id"], payload.recent_events_limit) if session else []

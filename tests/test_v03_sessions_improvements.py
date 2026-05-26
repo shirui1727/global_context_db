@@ -22,6 +22,7 @@ from app.memory.service import (
     create_memory_promotion,
     enqueue_memory_quality_improvements,
     list_memory_evidence,
+    list_memory_promotions,
     memory_quality_report,
     review_memory_promotion,
 )
@@ -347,4 +348,75 @@ def test_v03_tables_are_counted(v03_env):
     assert "improvement_tasks" in counts
     assert "memory_evidence" in counts
     assert "memory_promotion_proposals" in counts
+
+
+def test_improve_promote_session_memory_creates_promotion_proposal(v03_env):
+    session = create_session(
+        SessionCreate(source_agent="codex", project_path="S:/project/auto-promote", title="auto promote")
+    )
+    note = add_session_event(
+        session["id"],
+        SessionEventCreate(
+            event_type="assistant_note",
+            role="assistant",
+            content="Decision: asset manifests should be registered before vector rebuild runs.",
+        ),
+    )
+
+    improved = run_improve(
+        ImproveRequest(
+            task_kind="promote_session_memory",
+            target_domain="session",
+            target_id=session["id"],
+            execute=True,
+            created_by="tester",
+        )
+    )
+    proposals = list_memory_promotions(source_session_id=session["id"])
+
+    assert improved["ok"] is True
+    assert improved["task"]["status"] == "done"
+    assert improved["result"]["proposal"]["source_session_id"] == session["id"]
+    assert note["id"] in improved["result"]["proposal"]["source_event_ids"]
+    assert proposals[0]["id"] == improved["result"]["proposal"]["id"]
+
+
+def test_improve_summarize_session_creates_summary(v03_env):
+    session = create_session(
+        SessionCreate(
+            source_agent="codex",
+            project_path="S:/project/auto-summary",
+            title="summary target",
+            summary="working on automatic summaries",
+        )
+    )
+    add_session_event(
+        session["id"],
+        SessionEventCreate(event_type="user_prompt", role="user", content="summarize the latest progress"),
+    )
+    add_session_event(
+        session["id"],
+        SessionEventCreate(
+            event_type="assistant_note",
+            role="assistant",
+            content="Implemented deterministic improvement executors for session workflows.",
+        ),
+    )
+
+    improved = run_improve(
+        ImproveRequest(
+            task_kind="summarize_session",
+            target_domain="session",
+            target_id=session["id"],
+            execute=True,
+            created_by="tester",
+        )
+    )
+    refreshed = get_resume_context(ResumeContextRequest(session_id=session["id"], query="automatic summaries", top_k=5))
+
+    assert improved["ok"] is True
+    assert improved["task"]["status"] == "done"
+    assert improved["result"]["summary"]["summary_kind"] == "improvement_summary"
+    assert "Implemented deterministic improvement executors" in improved["result"]["summary"]["content"]
+    assert refreshed["session"]["summaries"][0]["id"] == improved["result"]["summary"]["id"]
 

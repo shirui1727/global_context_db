@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -17,9 +18,7 @@ class Settings(BaseSettings):
     require_mcp_api_key: bool = False
     asset_allow_prefixes: str = ""
     asset_deny_prefixes: str = ""
-
-    class Config:
-        env_prefix = "GCD_"
+    model_config = ConfigDict(env_prefix="GCD_")
 
 
 settings = Settings()

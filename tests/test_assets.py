@@ -26,7 +26,9 @@ from app.core.schemas import (
     AssetSearchRequest,
     FileReferenceCreate,
     FileReferenceUpdate,
+    ImproveRequest,
 )
+from app.improvements.service import list_improvement_tasks, run_improve
 from app.storage.bootstrap import bootstrap, reset_bootstrap
 from app.storage.vector_store import list_items, upsert_items
 
@@ -217,3 +219,76 @@ def test_fresh_install_preflight(asset_env):
     assert preflight["mode"] == "fresh_v0_2"
     assert preflight["asset_tables_ready"] is True
     assert preflight["recommended_first_write"] == "POST /assets"
+
+
+def test_failed_analysis_manifest_queues_followup_tasks(asset_env):
+    asset = create_asset(
+        AssetCreate(
+            uri="smb://NAS/videos/failure.mp4",
+            asset_key="video:failure",
+            checksum="sha-failure",
+            asset_kind="video",
+            media_type="video/mp4",
+        )
+    )
+
+    result = register_asset_analysis_manifest(
+        asset["id"],
+        AssetAnalysisManifest(
+            generated_by="pytest-worker",
+            analysis_status="failed",
+            artifacts=[
+                AssetAnalysisArtifact(
+                    artifact_kind="asr_text",
+                    artifact_uri="/data/artifacts/failure.asr.txt",
+                    media_type="text/plain",
+                    text="partial transcript",
+                    status="failed",
+                )
+            ],
+            metadata={"failure_reason": "worker timeout"},
+        ),
+    )
+    tasks = list_improvement_tasks(target_domain="asset", target_id=asset["id"])
+    task_kinds = {task["task_kind"] for task in tasks}
+
+    assert result["asset"]["analysis_status"] == "failed"
+    assert "refresh_asset_artifacts" in task_kinds
+    assert "reindex_asset" in task_kinds
+
+
+def test_improve_reindex_asset_updates_analysis_status(asset_env):
+    asset = create_asset(
+        AssetCreate(
+            uri="smb://NAS/photos/reindex.jpg",
+            asset_key="photo:reindex",
+            checksum="sha-old",
+            asset_kind="photo",
+            title="Reindex Photo",
+        )
+    )
+    changed = create_asset(
+        AssetCreate(
+            uri="smb://NAS/photos/reindex.jpg",
+            asset_key="photo:reindex",
+            checksum="sha-new",
+            asset_kind="photo",
+            title="Reindex Photo v2",
+        )
+    )
+
+    improved = run_improve(
+        ImproveRequest(
+            task_kind="reindex_asset",
+            target_domain="asset",
+            target_id=asset["id"],
+            execute=True,
+            created_by="tester",
+        )
+    )
+
+    assert changed["analysis_status"] == "needs_reindex"
+    assert improved["ok"] is True
+    assert improved["task"]["status"] == "done"
+    assert improved["result"]["asset"]["id"] == asset["id"]
+    assert improved["result"]["asset"]["analysis_status"] == "indexed"

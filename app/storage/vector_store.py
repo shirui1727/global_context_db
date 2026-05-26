@@ -64,10 +64,19 @@ def _seed_row() -> dict:
 def init_vector_store(path: Path) -> None:
     global _db
     _db = lancedb.connect(str(path))
-    if _table not in _db.table_names():
+    table_names = _list_table_names(_db)
+    if _table not in table_names:
         _db.create_table(_table, data=[_seed_row()], mode="overwrite")
         return
     _ensure_vector_schema()
+
+
+def _list_table_names(db) -> list[str]:
+    if hasattr(db, "list_tables"):
+        return list(db.list_tables())
+    if hasattr(db, "table_names"):
+        return list(db.table_names())
+    raise RuntimeError("LanceDB database object does not support table listing")
 
 
 def _ensure_vector_schema() -> None:

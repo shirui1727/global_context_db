@@ -498,6 +498,22 @@ def register_asset_analysis_manifest(asset_id: str, payload: AssetAnalysisManife
         payload.generated_by or "asset_analysis",
         {"artifact_count": len(registered), "version_id": version_id},
     )
+    if payload.analysis_status in {"failed", "needs_reindex"}:
+        _queue_improvement(
+            "reindex_asset",
+            asset_id,
+            f"analysis manifest status is {payload.analysis_status}",
+            payload.generated_by or "asset_analysis",
+            {"version_id": version_id, "analysis_status": payload.analysis_status},
+        )
+    if payload.analysis_status == "failed" or any(item.get("status") in {"failed", "stale", "pending"} for item in registered):
+        _queue_improvement(
+            "refresh_asset_artifacts",
+            asset_id,
+            "analysis manifest reported failed or stale artifacts",
+            payload.generated_by or "asset_analysis",
+            {"version_id": version_id, "artifact_count": len(registered)},
+        )
     return {"asset": updated_asset, "artifacts": registered}
 
 
@@ -720,6 +736,28 @@ def fresh_install_preflight() -> dict:
             "Run rebuild-vectors only if diagnostics or preflight reports legacy vectors.",
         ],
     }
+
+
+def execute_reindex_asset(asset_id: str, actor: str = "maintenance") -> dict:
+    asset = assets_repo().get(asset_id)
+    if not asset:
+        raise ValueError("asset not found")
+    updated = update_asset(
+        asset_id,
+        AssetUpdate(
+            analysis_status="indexed",
+            status="active" if asset.get("status") in {"stale", "missing"} else asset.get("status"),
+            updated_by=actor,
+            metadata={
+                **(asset.get("metadata") or {}),
+                "last_reindex_by": actor,
+                "last_reindex_at": _now(),
+            },
+        ),
+    )
+    _upsert_asset_vector(asset_id)
+    _audit("asset.reindexed", asset_id, actor, {"analysis_status": "indexed"})
+    return {"asset": updated}
 
 
 def _rank(row: dict, asset: dict) -> float:
