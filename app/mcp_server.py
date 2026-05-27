@@ -11,6 +11,9 @@ from app.core.schemas import (
     AssetAnalysisManifest,
     AssetCreate,
     AssetObservedItem,
+    ContextCubeBindingCreate,
+    ContextCubeCreate,
+    ContextCubeUpdate,
     AssetScanRunCreate,
     AssetSearchRequest,
     AssetUpdate,
@@ -55,6 +58,7 @@ from app.control.service import forget as control_forget
 from app.control.service import improve as control_improve
 from app.control.service import recall as control_recall
 from app.control.service import remember as control_remember
+from app.cubes.service import bind_to_cube, create_cube, get_cube, list_cube_bindings, list_cubes, update_cube
 from app.improvements.service import create_improvement_task, list_improvement_tasks, update_improvement_task
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
@@ -121,6 +125,7 @@ def gcd_health() -> dict[str, Any]:
 @mcp.tool()
 def gcd_add_memory(
     content: str,
+    cube_id: str | None = None,
     user_id: str = "default",
     tags: list[str] | None = None,
     agent_id: str | None = None,
@@ -140,6 +145,7 @@ def gcd_add_memory(
     return add_memory(
         MemoryCreate(
             content=content,
+            cube_id=cube_id,
             tags=tags or [],
             user_id=user_id,
             agent_id=agent_id,
@@ -159,26 +165,32 @@ def gcd_add_memory(
 def gcd_search_memories(
     query: str,
     top_k: int = 5,
+    cube_id: str | None = None,
+    cube_ids: list[str] | None = None,
     user_id: str | None = None,
     agent_id: str | None = None,
     memory_type: str | None = None,
 ) -> dict[str, Any]:
     """Search stored memories by semantic similarity."""
     bootstrap(settings)
-    return search_memory(query, top_k, user_id=user_id, agent_id=agent_id, memory_type=memory_type)
+    scoped_cube_ids = cube_ids or ([cube_id] if cube_id else None)
+    return search_memory(query, top_k, user_id=user_id, agent_id=agent_id, memory_type=memory_type, cube_ids=scoped_cube_ids)
 
 
 @mcp.tool()
 def memory_search(
     query: str,
     top_k: int = 5,
+    cube_id: str | None = None,
+    cube_ids: list[str] | None = None,
     user_id: str | None = None,
     agent_id: str | None = None,
     memory_type: str | None = None,
 ) -> dict[str, Any]:
     """Compatibility alias for older clients that call memory_search."""
     bootstrap(settings)
-    return search_memory(query, top_k, user_id=user_id, agent_id=agent_id, memory_type=memory_type)
+    scoped_cube_ids = cube_ids or ([cube_id] if cube_id else None)
+    return search_memory(query, top_k, user_id=user_id, agent_id=agent_id, memory_type=memory_type, cube_ids=scoped_cube_ids)
 
 
 @mcp.tool()
@@ -295,6 +307,109 @@ def gcd_enqueue_memory_quality_improvements(
     bootstrap(settings)
     require_mcp_write_key(api_key)
     return enqueue_memory_quality_improvements(limit=limit, created_by=created_by)
+
+
+@mcp.tool()
+def gcd_create_cube(
+    name: str,
+    cube_type: str = "project",
+    owner_id: str | None = None,
+    visibility: str = "private",
+    status: str = "active",
+    created_by: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Create a Context Cube memory space for project/user/agent/shared isolation."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return create_cube(
+        ContextCubeCreate(
+            name=name,
+            cube_type=cube_type,
+            owner_id=owner_id,
+            visibility=visibility,
+            status=status,
+            created_by=created_by,
+            metadata=metadata or {},
+        )
+    )
+
+
+@mcp.tool()
+def gcd_list_cubes(
+    limit: int = 100,
+    cube_type: str | None = None,
+    owner_id: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    """List Context Cubes."""
+    bootstrap(settings)
+    return list_cubes(limit=limit, cube_type=cube_type, owner_id=owner_id, status=status)
+
+
+@mcp.tool()
+def gcd_get_cube(cube_id: str) -> dict[str, Any]:
+    """Get one Context Cube by id."""
+    bootstrap(settings)
+    return get_cube(cube_id)
+
+
+@mcp.tool()
+def gcd_update_cube(
+    cube_id: str,
+    name: str | None = None,
+    cube_type: str | None = None,
+    owner_id: str | None = None,
+    visibility: str | None = None,
+    status: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Update Context Cube metadata or lifecycle status."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return update_cube(
+        cube_id,
+        ContextCubeUpdate(
+            name=name,
+            cube_type=cube_type,
+            owner_id=owner_id,
+            visibility=visibility,
+            status=status,
+            metadata=metadata,
+        ),
+    )
+
+
+@mcp.tool()
+def gcd_bind_to_cube(
+    cube_id: str,
+    target_domain: str,
+    target_id: str,
+    binding_kind: str = "owns",
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Bind a memory/document/asset/session/improvement object to a Context Cube."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return bind_to_cube(
+        cube_id,
+        ContextCubeBindingCreate(
+            target_domain=target_domain,
+            target_id=target_id,
+            binding_kind=binding_kind,
+            metadata=metadata or {},
+        ),
+    )
+
+
+@mcp.tool()
+def gcd_list_cube_bindings(cube_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    """List objects bound to a Context Cube."""
+    bootstrap(settings)
+    return list_cube_bindings(cube_id, limit)
 
 
 @mcp.tool()
@@ -436,6 +551,7 @@ def gcd_ingest_text(source: str, text: str, api_key: str | None = None) -> dict[
 @mcp.tool()
 def gcd_add_asset(
     uri: str,
+    cube_id: str | None = None,
     title: str | None = None,
     summary: str = "",
     tags: list[str] | None = None,
@@ -461,6 +577,7 @@ def gcd_add_asset(
     return create_asset(
         AssetCreate(
             uri=uri,
+            cube_id=cube_id,
             title=title,
             summary=summary,
             tags=tags or [],
@@ -486,12 +603,23 @@ def gcd_add_asset(
 def gcd_search_assets(
     query: str,
     top_k: int = 5,
+    cube_id: str | None = None,
+    cube_ids: list[str] | None = None,
     asset_kind: str | None = None,
     trust_level: str | None = None,
 ) -> dict[str, Any]:
     """Search governed assets only, without mixing memories or documents."""
     bootstrap(settings)
-    return search_assets(AssetSearchRequest(query=query, top_k=top_k, asset_kind=asset_kind, trust_level=trust_level))
+    return search_assets(
+        AssetSearchRequest(
+            query=query,
+            top_k=top_k,
+            cube_id=cube_id,
+            cube_ids=cube_ids or [],
+            asset_kind=asset_kind,
+            trust_level=trust_level,
+        )
+    )
 
 
 @mcp.tool()
@@ -653,6 +781,7 @@ def gcd_rebuild_asset_vectors(clean_legacy: bool = True, api_key: str | None = N
 @mcp.tool()
 def gcd_start_session(
     source_agent: str = "unknown_agent",
+    cube_id: str | None = None,
     project_path: str | None = None,
     title: str | None = None,
     summary: str = "",
@@ -664,6 +793,7 @@ def gcd_start_session(
     require_mcp_write_key(api_key)
     return create_session(
         SessionCreate(
+            cube_id=cube_id,
             source_agent=source_agent,
             project_path=project_path,
             title=title,
@@ -772,6 +902,7 @@ def gcd_create_improvement_task(
     task_kind: str,
     target_domain: str,
     target_id: str,
+    cube_id: str | None = None,
     priority: int = 50,
     reason: str = "",
     created_by: str | None = None,
@@ -784,6 +915,7 @@ def gcd_create_improvement_task(
     return create_improvement_task(
         ImprovementTaskCreate(
             task_kind=task_kind,
+            cube_id=cube_id,
             target_domain=target_domain,
             target_id=target_id,
             priority=priority,
@@ -837,6 +969,7 @@ def gcd_update_improvement_task(
 @mcp.tool()
 def gcd_improve(
     task_kind: str = "rebuild_vectors",
+    cube_id: str | None = None,
     target_domain: str = "system",
     target_id: str = "all",
     execute: bool = False,
@@ -853,6 +986,7 @@ def gcd_improve(
     return control_improve(
         ImproveRequest(
             task_kind=task_kind,
+            cube_id=cube_id,
             target_domain=target_domain,
             target_id=target_id,
             execute=execute,
@@ -868,6 +1002,7 @@ def gcd_improve(
 @mcp.tool()
 def gcd_remember(
     content_type: str = "memory",
+    cube_id: str | None = None,
     content: str = "",
     source: str = "remember",
     session_id: str | None = None,
@@ -888,6 +1023,7 @@ def gcd_remember(
             content_type=content_type,
             content=content,
             source=source,
+            cube_id=cube_id,
             session_id=session_id,
             project_path=project_path,
             tags=tags or [],
@@ -904,6 +1040,8 @@ def gcd_remember(
 def gcd_recall(
     query: str,
     top_k: int = 5,
+    cube_id: str | None = None,
+    cube_ids: list[str] | None = None,
     session_id: str | None = None,
     project_path: str | None = None,
     mode: str = "context_search",
@@ -917,6 +1055,8 @@ def gcd_recall(
         RecallRequest(
             query=query,
             top_k=top_k,
+            cube_id=cube_id,
+            cube_ids=cube_ids or [],
             session_id=session_id,
             project_path=project_path,
             mode=mode,
@@ -1053,6 +1193,8 @@ def gcd_update_file_reference(
 def gcd_search_context(
     query: str,
     top_k: int = 5,
+    cube_id: str | None = None,
+    cube_ids: list[str] | None = None,
     context_domain: str | None = None,
     kind: str | None = None,
     mode: str = "context_search",
@@ -1064,6 +1206,8 @@ def gcd_search_context(
     return search_context(
         query,
         top_k,
+        cube_id=cube_id,
+        cube_ids=cube_ids or [],
         context_domain=context_domain,
         kind=kind,
         mode=mode,

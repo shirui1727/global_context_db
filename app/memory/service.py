@@ -82,6 +82,7 @@ def add_memory(payload: MemoryCreate) -> dict:
     row = {
         "id": memory_id,
         "content": payload.content,
+        "cube_id": payload.cube_id,
         "tags": payload.tags,
         "user_id": payload.user_id,
         "agent_id": payload.agent_id,
@@ -117,6 +118,7 @@ def add_memory(payload: MemoryCreate) -> dict:
                 "kind": "memory",
                 "text": payload.content,
                 "vector": embed_text(payload.content).tolist(),
+                "cube_id": payload.cube_id,
                 "tags": payload.tags,
                 "user_id": payload.user_id,
                 "agent_id": payload.agent_id,
@@ -177,6 +179,7 @@ def create_memory_promotion(payload: MemoryPromotionCreate) -> dict:
             "source_session_id": payload.source_session_id,
             "source_event_ids": source_event_ids,
             "proposed_content": payload.proposed_content,
+            "cube_id": payload.cube_id,
             "tags": payload.tags,
             "memory_type": payload.memory_type,
             "user_id": payload.user_id,
@@ -447,6 +450,7 @@ def review_memory_promotion(proposal_id: str, payload: MemoryPromotionReview) ->
     memory = add_memory(
         MemoryCreate(
             content=proposal["proposed_content"],
+            cube_id=proposal.get("cube_id"),
             tags=proposal["tags"],
             user_id=proposal["user_id"],
             agent_id=proposal["agent_id"],
@@ -513,8 +517,9 @@ def search_memory(
     user_id: str | None = None,
     agent_id: str | None = None,
     memory_type: str | None = None,
+    cube_ids: list[str] | None = None,
 ) -> dict:
-    results = search_items(query, max(top_k * 5, top_k), kind="memory")
+    results = search_items(query, max(top_k * 5, top_k), kind="memory", cube_ids=cube_ids)
     cleaned = []
     for row in results:
         if user_id and row.get("user_id") != user_id:
@@ -528,6 +533,7 @@ def search_memory(
                 "id": row.get("id"),
                 "kind": row.get("kind"),
                 "text": row.get("text"),
+                "cube_id": row.get("cube_id"),
                 "tags": row.get("tags"),
                 "user_id": row.get("user_id"),
                 "agent_id": row.get("agent_id"),
@@ -570,6 +576,7 @@ def update_memory(memory_id: str, payload: MemoryUpdate) -> dict:
                 "kind": "memory",
                 "text": updated["content"],
                 "vector": embed_text(updated["content"]).tolist(),
+                "cube_id": updated.get("cube_id"),
                 "tags": updated.get("tags", []),
                 "user_id": updated.get("user_id", "default"),
                 "agent_id": updated.get("agent_id"),

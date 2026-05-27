@@ -26,6 +26,7 @@ def remember(payload: RememberRequest) -> dict:
             "content_type": content_type,
             "result": add_memory(
                 MemoryCreate(
+                    cube_id=payload.cube_id,
                     content=payload.content,
                     tags=payload.tags,
                     user_id=payload.user_id,
@@ -62,6 +63,8 @@ def recall(payload: RecallRequest) -> dict:
     result = search_context(
         payload.query,
         payload.top_k,
+        cube_id=payload.cube_id,
+        cube_ids=payload.cube_ids,
         mode=payload.mode,
         context_budget_chars=payload.context_budget_chars,
     )

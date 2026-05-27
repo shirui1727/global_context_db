@@ -18,6 +18,9 @@ from app.core.schemas import (
     AssetArtifactUpdate,
     AssetAnalysisManifest,
     AssetCreate,
+    ContextCubeBindingCreate,
+    ContextCubeCreate,
+    ContextCubeUpdate,
     AssetScanRunCreate,
     AssetSearchRequest,
     AssetUpdate,
@@ -75,6 +78,7 @@ from app.control.service import forget as control_forget
 from app.control.service import improve as control_improve
 from app.control.service import recall as control_recall
 from app.control.service import remember as control_remember
+from app.cubes.service import bind_to_cube, create_cube, get_cube, list_cube_bindings, list_cubes, update_cube
 from app.improvements.service import create_improvement_task, list_improvement_tasks, update_improvement_task
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
@@ -673,12 +677,64 @@ def search(payload: SearchRequest) -> dict:
     return search_context(
         payload.query,
         payload.top_k,
+        cube_id=payload.cube_id,
+        cube_ids=payload.cube_ids,
         context_domain=payload.context_domain,
         kind=payload.kind,
         mode=payload.mode,
         legacy_flat=payload.legacy_flat,
         context_budget_chars=payload.context_budget_chars,
     )
+
+
+@router.post("/cubes", dependencies=[Depends(require_api_key)])
+def cubes_create(payload: ContextCubeCreate) -> dict:
+    try:
+        return create_cube(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/cubes")
+def cubes_list(
+    limit: int = 100,
+    cube_type: str | None = None,
+    owner_id: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    return list_cubes(limit=limit, cube_type=cube_type, owner_id=owner_id, status=status)
+
+
+@router.get("/cubes/{cube_id}")
+def cubes_get(cube_id: str) -> dict:
+    try:
+        return get_cube(cube_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.patch("/cubes/{cube_id}", dependencies=[Depends(require_api_key)])
+def cubes_update(cube_id: str, payload: ContextCubeUpdate) -> dict:
+    try:
+        return update_cube(cube_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/cubes/{cube_id}/bindings", dependencies=[Depends(require_api_key)])
+def cubes_bindings_create(cube_id: str, payload: ContextCubeBindingCreate) -> dict:
+    try:
+        return bind_to_cube(cube_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/cubes/{cube_id}/bindings")
+def cubes_bindings_list(cube_id: str, limit: int = 100) -> list[dict]:
+    try:
+        return list_cube_bindings(cube_id, limit)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @router.post("/retrieval/eval")

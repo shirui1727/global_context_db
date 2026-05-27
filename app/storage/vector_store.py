@@ -19,6 +19,7 @@ _required_columns = {
     "tags",
     "user_id",
     "agent_id",
+    "cube_id",
     "session_id",
     "conversation_id",
     "memory_type",
@@ -46,6 +47,7 @@ def _seed_row() -> dict:
         "tags": "",
         "user_id": "",
         "agent_id": "",
+        "cube_id": "",
         "session_id": "",
         "conversation_id": "",
         "memory_type": "",
@@ -121,6 +123,7 @@ def _normalize_row(row: dict) -> dict:
         "tags": "",
         "user_id": "",
         "agent_id": "",
+        "cube_id": "",
         "session_id": "",
         "conversation_id": "",
         "memory_type": "",
@@ -148,6 +151,7 @@ def _normalize_row(row: dict) -> dict:
         "tags",
         "user_id",
         "agent_id",
+        "cube_id",
         "session_id",
         "conversation_id",
         "memory_type",
@@ -205,6 +209,7 @@ def search_items(
     top_k: int,
     kind: str | None = None,
     context_domain: str | None = None,
+    cube_ids: list[str] | None = None,
 ) -> list[dict]:
     table = _table_obj()
     qv = embed_text(query).tolist()
@@ -213,5 +218,8 @@ def search_items(
         results = [r for r in results if r.get("kind") == kind]
     if context_domain:
         results = [r for r in results if r.get("context_domain") == context_domain]
+    if cube_ids:
+        allowed = set(cube_ids)
+        results = [r for r in results if r.get("cube_id") in allowed]
     results = [r for r in results if r.get("kind") != "seed"]
     return results[:top_k]

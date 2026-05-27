@@ -23,6 +23,8 @@ def _decode_tags(value: object) -> list[str]:
 def search_context(
     query: str,
     top_k: int = 5,
+    cube_id: str | None = None,
+    cube_ids: list[str] | None = None,
     context_domain: str | None = None,
     kind: str | None = None,
     mode: str = "context_search",
@@ -37,7 +39,8 @@ def search_context(
     elif mode == "asset_search":
         context_domain = "asset"
         kind = "asset"
-    results = search_items(query, top_k, kind=kind, context_domain=context_domain)
+    scoped_cube_ids = cube_ids or ([cube_id] if cube_id else None)
+    results = search_items(query, top_k, kind=kind, context_domain=context_domain, cube_ids=scoped_cube_ids)
     cleaned = []
     for row in results:
         metadata = _decode_metadata(row.get("metadata"))
@@ -45,6 +48,7 @@ def search_context(
             {
                 "id": row.get("id"),
                 "kind": row.get("kind"),
+                "cube_id": row.get("cube_id") or metadata.get("cube_id"),
                 "context_domain": row.get("context_domain") or metadata.get("context_domain"),
                 "text": row.get("text"),
                 "source": row.get("source"),

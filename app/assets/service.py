@@ -200,6 +200,7 @@ def _upsert_asset_vector(asset_id: str) -> None:
                 "kind": "asset",
                 "text": text,
                 "vector": embed_text(text).tolist(),
+                "cube_id": asset.get("cube_id"),
                 "source": primary_location.get("uri") if primary_location else "",
                 "doc_id": asset_id,
                 "chunk_index": 0,
@@ -214,6 +215,7 @@ def _upsert_asset_vector(asset_id: str) -> None:
                 "analysis_status": asset.get("analysis_status"),
                 "metadata": {
                     "domain": "asset",
+                    "cube_id": asset.get("cube_id"),
                     "asset_id": asset_id,
                     "asset_key": asset.get("asset_key"),
                     "asset_kind": asset.get("asset_kind"),
@@ -238,6 +240,7 @@ def _upsert_artifact_text_vector(asset: dict, artifact: dict, text: str) -> None
                 "kind": "asset_artifact",
                 "text": text,
                 "vector": embed_text(text).tolist(),
+                "cube_id": asset.get("cube_id"),
                 "source": artifact.get("artifact_uri") or "",
                 "doc_id": asset["id"],
                 "chunk_index": 0,
@@ -252,6 +255,7 @@ def _upsert_artifact_text_vector(asset: dict, artifact: dict, text: str) -> None
                 "analysis_status": asset.get("analysis_status"),
                 "metadata": {
                     "domain": "asset",
+                    "cube_id": asset.get("cube_id"),
                     "asset_id": asset["id"],
                     "asset_key": asset.get("asset_key"),
                     "asset_kind": asset.get("asset_kind"),
@@ -317,6 +321,7 @@ def create_asset(payload: AssetCreate) -> dict:
     assets_repo().upsert(
         {
             "id": asset_id,
+            "cube_id": payload.cube_id,
             "asset_key": identity["asset_key"],
             "asset_kind": payload.asset_kind or "generic_asset",
             "title": title,
@@ -647,7 +652,14 @@ def get_asset_scan_run(scan_run_id: str) -> dict:
 
 
 def search_assets(payload: AssetSearchRequest) -> dict:
-    results = search_items(payload.query, max(payload.top_k * 5, payload.top_k), kind="asset", context_domain="asset")
+    cube_ids = payload.cube_ids or ([payload.cube_id] if payload.cube_id else None)
+    results = search_items(
+        payload.query,
+        max(payload.top_k * 5, payload.top_k),
+        kind="asset",
+        context_domain="asset",
+        cube_ids=cube_ids,
+    )
     allowed_status = set(payload.status or ["active", "stale"])
     cleaned = []
     for row in results:

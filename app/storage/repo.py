@@ -11,6 +11,36 @@ def init_sqlite(path: Path) -> None:
     conn = sqlite3.connect(path)
     conn.execute("pragma journal_mode = wal")
     conn.execute(
+        """
+        create table if not exists context_cubes (
+            id text primary key,
+            name text,
+            cube_type text default 'project',
+            owner_id text,
+            visibility text default 'private',
+            status text default 'active',
+            created_by text,
+            created_at text,
+            updated_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists cube_bindings (
+            id text primary key,
+            cube_id text,
+            target_domain text,
+            target_id text,
+            binding_kind text default 'owns',
+            created_at text,
+            metadata text default '{}',
+            unique(cube_id, target_domain, target_id, binding_kind)
+        )
+        """
+    )
+    conn.execute(
         "create table if not exists documents (id text primary key, source text, content text)"
     )
     conn.execute(
@@ -21,6 +51,7 @@ def init_sqlite(path: Path) -> None:
         create table if not exists memories (
             id text primary key,
             content text,
+            cube_id text,
             tags text,
             user_id text default 'default',
             agent_id text,
@@ -76,6 +107,7 @@ def init_sqlite(path: Path) -> None:
             source_session_id text,
             source_event_ids text default '[]',
             proposed_content text,
+            cube_id text,
             tags text,
             memory_type text default 'long_term',
             user_id text default 'default',
@@ -213,6 +245,7 @@ def init_sqlite(path: Path) -> None:
         """
         create table if not exists assets (
             id text primary key,
+            cube_id text,
             asset_key text,
             asset_kind text,
             title text,
@@ -303,6 +336,7 @@ def init_sqlite(path: Path) -> None:
         """
         create table if not exists agent_sessions (
             id text primary key,
+            cube_id text,
             source_agent text,
             project_path text,
             status text default 'running',
@@ -383,6 +417,7 @@ def init_sqlite(path: Path) -> None:
         """
         create table if not exists improvement_tasks (
             id text primary key,
+            cube_id text,
             task_kind text,
             target_domain text,
             target_id text,
@@ -404,6 +439,7 @@ def init_sqlite(path: Path) -> None:
         conn,
         "memories",
         {
+            "cube_id": "text",
             "context_domain": "text default 'memory'",
             "status": "text default 'active'",
             "source_kind": "text default 'agent_note'",
@@ -432,10 +468,14 @@ def init_sqlite(path: Path) -> None:
         conn,
         "assets",
         {
+            "cube_id": "text",
             "analysis_status": "text default 'indexed'",
             "updated_by": "text",
         },
     )
+    _ensure_columns(conn, "agent_sessions", {"cube_id": "text"})
+    _ensure_columns(conn, "improvement_tasks", {"cube_id": "text"})
+    _ensure_columns(conn, "memory_promotion_proposals", {"cube_id": "text"})
     _ensure_indexes(conn)
     conn.commit()
     conn.close()
@@ -450,6 +490,13 @@ def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str
 
 def _ensure_indexes(conn: sqlite3.Connection) -> None:
     indexes = [
+        "create index if not exists idx_context_cubes_type on context_cubes(cube_type)",
+        "create index if not exists idx_context_cubes_owner on context_cubes(owner_id)",
+        "create index if not exists idx_cube_bindings_cube on cube_bindings(cube_id)",
+        "create index if not exists idx_cube_bindings_target on cube_bindings(target_domain, target_id)",
+        "create index if not exists idx_assets_cube on assets(cube_id)",
+        "create index if not exists idx_memories_cube on memories(cube_id)",
+        "create index if not exists idx_sessions_cube on agent_sessions(cube_id)",
         "create index if not exists idx_assets_asset_key on assets(asset_key)",
         "create index if not exists idx_assets_status on assets(status)",
         "create index if not exists idx_assets_kind on assets(asset_kind)",
@@ -515,6 +562,8 @@ def sqlite_path() -> Path:
 
 def db_counts() -> dict[str, int]:
     tables = [
+        "context_cubes",
+        "cube_bindings",
         "documents",
         "chunks",
         "memories",
@@ -572,6 +621,168 @@ def failed_operations(limit: int = 20) -> list[dict]:
         }
         for row in rows
     ]
+
+
+class ContextCubesRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into context_cubes(
+                    id, name, cube_type, owner_id, visibility, status,
+                    created_by, created_at, updated_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    name=coalesce(excluded.name, context_cubes.name),
+                    cube_type=coalesce(excluded.cube_type, context_cubes.cube_type),
+                    owner_id=coalesce(excluded.owner_id, context_cubes.owner_id),
+                    visibility=coalesce(excluded.visibility, context_cubes.visibility),
+                    status=coalesce(excluded.status, context_cubes.status),
+                    updated_at=excluded.updated_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("name"),
+                    row.get("cube_type") or "project",
+                    row.get("owner_id"),
+                    row.get("visibility") or "private",
+                    row.get("status") or "active",
+                    row.get("created_by"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(row["id"])
+
+    def get(self, cube_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, name, cube_type, owner_id, visibility, status,
+                       created_by, created_at, updated_at, metadata
+                from context_cubes where id = ?
+                """,
+                (cube_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_recent(
+        self,
+        limit: int = 100,
+        cube_type: str | None = None,
+        owner_id: str | None = None,
+        status: str | None = None,
+    ) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if cube_type:
+            where.append("cube_type = ?")
+            params.append(cube_type)
+        if owner_id:
+            where.append("owner_id = ?")
+            params.append(owner_id)
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        query = """
+            select id, name, cube_type, owner_id, visibility, status,
+                   created_by, created_at, updated_at, metadata
+            from context_cubes
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by updated_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "name": row[1],
+            "cube_type": row[2] or "project",
+            "owner_id": row[3],
+            "visibility": row[4] or "private",
+            "status": row[5] or "active",
+            "created_by": row[6],
+            "created_at": row[7],
+            "updated_at": row[8],
+            "metadata": _json_loads(row[9], {}),
+        }
+
+
+class CubeBindingsRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into cube_bindings(
+                    id, cube_id, target_domain, target_id, binding_kind, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                on conflict(cube_id, target_domain, target_id, binding_kind) do update set
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("cube_id"),
+                    row.get("target_domain"),
+                    row.get("target_id"),
+                    row.get("binding_kind") or "owns",
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+            saved = conn.execute(
+                """
+                select id, cube_id, target_domain, target_id, binding_kind, created_at, metadata
+                from cube_bindings
+                where cube_id = ? and target_domain = ? and target_id = ? and binding_kind = ?
+                """,
+                (row.get("cube_id"), row.get("target_domain"), row.get("target_id"), row.get("binding_kind") or "owns"),
+            ).fetchone()
+        return self._decode(saved)
+
+    def list_by_cube(self, cube_id: str, limit: int = 100) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, cube_id, target_domain, target_id, binding_kind, created_at, metadata
+                from cube_bindings
+                where cube_id = ?
+                order by created_at desc, rowid desc
+                limit ?
+                """,
+                (cube_id, limit),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def list_by_target(self, target_domain: str, target_id: str, limit: int = 100) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, cube_id, target_domain, target_id, binding_kind, created_at, metadata
+                from cube_bindings
+                where target_domain = ? and target_id = ?
+                order by created_at desc, rowid desc
+                limit ?
+                """,
+                (target_domain, target_id, limit),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "cube_id": row[1],
+            "target_domain": row[2],
+            "target_id": row[3],
+            "binding_kind": row[4] or "owns",
+            "created_at": row[5],
+            "metadata": _json_loads(row[6], {}),
+        }
 
 
 class DocumentsRepo:
@@ -823,11 +1034,12 @@ class AssetsRepo:
             conn.execute(
                 """
                 insert into assets(
-                    id, asset_key, asset_kind, title, summary, tags, media_type, status,
+                    id, cube_id, asset_key, asset_kind, title, summary, tags, media_type, status,
                     trust_level, source_kind, analysis_status, created_by, updated_by,
                     confirmed_by, created_at, updated_at, metadata
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(id) do update set
+                    cube_id=coalesce(excluded.cube_id, assets.cube_id),
                     asset_key=coalesce(excluded.asset_key, assets.asset_key),
                     asset_kind=coalesce(excluded.asset_kind, assets.asset_kind),
                     title=coalesce(excluded.title, assets.title),
@@ -845,6 +1057,7 @@ class AssetsRepo:
                 """,
                 (
                     row["id"],
+                    row.get("cube_id"),
                     row.get("asset_key"),
                     row.get("asset_kind"),
                     row.get("title"),
@@ -868,7 +1081,7 @@ class AssetsRepo:
         with _conn() as conn:
             row = conn.execute(
                 """
-                select id, asset_key, asset_kind, title, summary, tags, media_type, status,
+                select id, cube_id, asset_key, asset_kind, title, summary, tags, media_type, status,
                        trust_level, source_kind, analysis_status, created_by, updated_by,
                        confirmed_by, created_at, updated_at, metadata
                 from assets
@@ -907,7 +1120,7 @@ class AssetsRepo:
             where.append("trust_level = ?")
             params.append(trust_level)
         query = """
-            select id, asset_key, asset_kind, title, summary, tags, media_type, status,
+            select id, cube_id, asset_key, asset_kind, title, summary, tags, media_type, status,
                    trust_level, source_kind, analysis_status, created_by, updated_by,
                    confirmed_by, created_at, updated_at, metadata
             from assets
@@ -945,22 +1158,23 @@ class AssetsRepo:
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         return {
             "id": row[0],
-            "asset_key": row[1],
-            "asset_kind": row[2],
-            "title": row[3],
-            "summary": row[4] or "",
-            "tags": [tag for tag in (row[5] or "").split(",") if tag],
-            "media_type": row[6],
-            "status": row[7] or "active",
-            "trust_level": row[8] or "unverified",
-            "source_kind": row[9] or "nas_reference",
-            "analysis_status": row[10] or "indexed",
-            "created_by": row[11],
-            "updated_by": row[12],
-            "confirmed_by": row[13],
-            "created_at": row[14],
-            "updated_at": row[15],
-            "metadata": _json_loads(row[16], {}),
+            "cube_id": row[1],
+            "asset_key": row[2],
+            "asset_kind": row[3],
+            "title": row[4],
+            "summary": row[5] or "",
+            "tags": [tag for tag in (row[6] or "").split(",") if tag],
+            "media_type": row[7],
+            "status": row[8] or "active",
+            "trust_level": row[9] or "unverified",
+            "source_kind": row[10] or "nas_reference",
+            "analysis_status": row[11] or "indexed",
+            "created_by": row[12],
+            "updated_by": row[13],
+            "confirmed_by": row[14],
+            "created_at": row[15],
+            "updated_at": row[16],
+            "metadata": _json_loads(row[17], {}),
         }
 
 
@@ -1270,10 +1484,11 @@ class AgentSessionsRepo:
             conn.execute(
                 """
                 insert into agent_sessions(
-                    id, source_agent, project_path, status, title, summary,
+                    id, cube_id, source_agent, project_path, status, title, summary,
                     started_at, last_activity_at, ended_at, created_by, metadata
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(id) do update set
+                    cube_id=coalesce(excluded.cube_id, agent_sessions.cube_id),
                     source_agent=coalesce(excluded.source_agent, agent_sessions.source_agent),
                     project_path=coalesce(excluded.project_path, agent_sessions.project_path),
                     status=coalesce(excluded.status, agent_sessions.status),
@@ -1285,6 +1500,7 @@ class AgentSessionsRepo:
                 """,
                 (
                     row["id"],
+                    row.get("cube_id"),
                     row.get("source_agent"),
                     row.get("project_path"),
                     row.get("status") or "running",
@@ -1302,7 +1518,7 @@ class AgentSessionsRepo:
         with _conn() as conn:
             row = conn.execute(
                 """
-                select id, source_agent, project_path, status, title, summary,
+                select id, cube_id, source_agent, project_path, status, title, summary,
                        started_at, last_activity_at, ended_at, created_by, metadata
                 from agent_sessions
                 where id = ?
@@ -1330,7 +1546,7 @@ class AgentSessionsRepo:
             where.append("project_path = ?")
             params.append(project_path)
         query = """
-            select id, source_agent, project_path, status, title, summary,
+            select id, cube_id, source_agent, project_path, status, title, summary,
                    started_at, last_activity_at, ended_at, created_by, metadata
             from agent_sessions
         """
@@ -1364,16 +1580,17 @@ class AgentSessionsRepo:
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         return {
             "id": row[0],
-            "source_agent": row[1],
-            "project_path": row[2],
-            "status": row[3] or "running",
-            "title": row[4],
-            "summary": row[5] or "",
-            "started_at": row[6],
-            "last_activity_at": row[7],
-            "ended_at": row[8],
-            "created_by": row[9],
-            "metadata": _json_loads(row[10], {}),
+            "cube_id": row[1],
+            "source_agent": row[2],
+            "project_path": row[3],
+            "status": row[4] or "running",
+            "title": row[5],
+            "summary": row[6] or "",
+            "started_at": row[7],
+            "last_activity_at": row[8],
+            "ended_at": row[9],
+            "created_by": row[10],
+            "metadata": _json_loads(row[11], {}),
         }
 
 
@@ -1594,9 +1811,9 @@ class ImprovementTasksRepo:
             conn.execute(
                 """
                 insert into improvement_tasks(
-                    id, task_kind, target_domain, target_id, status, priority, reason,
+                    id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
                     created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(task_kind, target_domain, target_id) do update set
                     status=case
                         when improvement_tasks.status in ('done', 'running') then improvement_tasks.status
@@ -1609,6 +1826,7 @@ class ImprovementTasksRepo:
                 """,
                 (
                     row["id"],
+                    row.get("cube_id"),
                     row.get("task_kind"),
                     row.get("target_domain"),
                     row.get("target_id"),
@@ -1626,7 +1844,7 @@ class ImprovementTasksRepo:
             )
             saved = conn.execute(
                 """
-                select id, task_kind, target_domain, target_id, status, priority, reason,
+                select id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
                        created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
                 from improvement_tasks
                 where task_kind = ? and target_domain = ? and target_id = ?
@@ -1639,7 +1857,7 @@ class ImprovementTasksRepo:
         with _conn() as conn:
             row = conn.execute(
                 """
-                select id, task_kind, target_domain, target_id, status, priority, reason,
+                select id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
                        created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
                 from improvement_tasks
                 where id = ?
@@ -1698,7 +1916,7 @@ class ImprovementTasksRepo:
             where.append("target_id = ?")
             params.append(target_id)
         query = """
-            select id, task_kind, target_domain, target_id, status, priority, reason,
+            select id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
                    created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
             from improvement_tasks
         """
@@ -1725,19 +1943,20 @@ class ImprovementTasksRepo:
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         return {
             "id": row[0],
-            "task_kind": row[1],
-            "target_domain": row[2],
-            "target_id": row[3],
-            "status": row[4] or "pending",
-            "priority": row[5],
-            "reason": row[6],
-            "created_by": row[7],
-            "claimed_by": row[8],
-            "created_at": row[9],
-            "updated_at": row[10],
-            "finished_at": row[11],
-            "error_message": row[12],
-            "metadata": _json_loads(row[13], {}),
+            "cube_id": row[1],
+            "task_kind": row[2],
+            "target_domain": row[3],
+            "target_id": row[4],
+            "status": row[5] or "pending",
+            "priority": row[6],
+            "reason": row[7],
+            "created_by": row[8],
+            "claimed_by": row[9],
+            "created_at": row[10],
+            "updated_at": row[11],
+            "finished_at": row[12],
+            "error_message": row[13],
+            "metadata": _json_loads(row[14], {}),
         }
 
 
@@ -1747,14 +1966,15 @@ class MemoriesRepo:
             conn.execute(
                 """
                 insert or replace into memories(
-                    id, content, tags, user_id, agent_id, session_id, conversation_id,
+                    id, content, cube_id, tags, user_id, agent_id, session_id, conversation_id,
                     memory_type, context_domain, status, source_kind, trust_level,
                     metadata, created_at, updated_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row["id"],
                     row["content"],
+                    row.get("cube_id"),
                     ",".join(row.get("tags", [])),
                     row.get("user_id") or "default",
                     row.get("agent_id"),
@@ -1775,7 +1995,7 @@ class MemoriesRepo:
         with _conn() as conn:
             rows = conn.execute(
                 """
-                select id, content, tags, user_id, agent_id, session_id, conversation_id,
+                select id, content, cube_id, tags, user_id, agent_id, session_id, conversation_id,
                        memory_type, context_domain, status, source_kind, trust_level,
                        metadata, created_at, updated_at
                 from memories
@@ -1806,7 +2026,7 @@ class MemoriesRepo:
             where.append("memory_type = ?")
             params.append(memory_type)
         query = """
-            select id, content, tags, user_id, agent_id, session_id, conversation_id,
+            select id, content, cube_id, tags, user_id, agent_id, session_id, conversation_id,
                    memory_type, context_domain, status, source_kind, trust_level,
                    metadata, created_at, updated_at
             from memories
@@ -1861,25 +2081,26 @@ class MemoriesRepo:
 
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         try:
-            metadata = json.loads(row[12] or "{}")
+            metadata = json.loads(row[13] or "{}")
         except json.JSONDecodeError:
             metadata = {}
         return {
             "id": row[0],
             "content": row[1],
-            "tags": [t for t in (row[2] or "").split(",") if t],
-            "user_id": row[3] or "default",
-            "agent_id": row[4],
-            "session_id": row[5],
-            "conversation_id": row[6],
-            "memory_type": row[7] or "long_term",
-            "context_domain": row[8] or "memory",
-            "status": row[9] or "active",
-            "source_kind": row[10] or "agent_note",
-            "trust_level": row[11] or "verified",
+            "cube_id": row[2],
+            "tags": [t for t in (row[3] or "").split(",") if t],
+            "user_id": row[4] or "default",
+            "agent_id": row[5],
+            "session_id": row[6],
+            "conversation_id": row[7],
+            "memory_type": row[8] or "long_term",
+            "context_domain": row[9] or "memory",
+            "status": row[10] or "active",
+            "source_kind": row[11] or "agent_note",
+            "trust_level": row[12] or "verified",
             "metadata": metadata,
-            "created_at": row[13],
-            "updated_at": row[14],
+            "created_at": row[14],
+            "updated_at": row[15],
         }
 
 
@@ -2008,13 +2229,14 @@ class MemoryPromotionProposalsRepo:
             conn.execute(
                 """
                 insert into memory_promotion_proposals(
-                    id, source_session_id, source_event_ids, proposed_content, tags,
+                    id, source_session_id, source_event_ids, proposed_content, cube_id, tags,
                     memory_type, user_id, agent_id, project_path, status, reason,
                     created_by, reviewed_by, created_at, updated_at, reviewed_at,
                     promoted_memory_id, metadata
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(id) do update set
                     proposed_content=coalesce(excluded.proposed_content, memory_promotion_proposals.proposed_content),
+                    cube_id=coalesce(excluded.cube_id, memory_promotion_proposals.cube_id),
                     tags=coalesce(excluded.tags, memory_promotion_proposals.tags),
                     memory_type=coalesce(excluded.memory_type, memory_promotion_proposals.memory_type),
                     status=coalesce(excluded.status, memory_promotion_proposals.status),
@@ -2030,6 +2252,7 @@ class MemoryPromotionProposalsRepo:
                     row.get("source_session_id"),
                     json.dumps(row.get("source_event_ids") or [], ensure_ascii=False),
                     row.get("proposed_content"),
+                    row.get("cube_id"),
                     ",".join(row.get("tags", [])),
                     row.get("memory_type") or "long_term",
                     row.get("user_id") or "default",
@@ -2052,7 +2275,7 @@ class MemoryPromotionProposalsRepo:
         with _conn() as conn:
             row = conn.execute(
                 """
-                select id, source_session_id, source_event_ids, proposed_content, tags,
+                select id, source_session_id, source_event_ids, proposed_content, cube_id, tags,
                        memory_type, user_id, agent_id, project_path, status, reason,
                        created_by, reviewed_by, created_at, updated_at, reviewed_at,
                        promoted_memory_id, metadata
@@ -2073,7 +2296,7 @@ class MemoryPromotionProposalsRepo:
             where.append("source_session_id = ?")
             params.append(source_session_id)
         query = """
-            select id, source_session_id, source_event_ids, proposed_content, tags,
+            select id, source_session_id, source_event_ids, proposed_content, cube_id, tags,
                    memory_type, user_id, agent_id, project_path, status, reason,
                    created_by, reviewed_by, created_at, updated_at, reviewed_at,
                    promoted_memory_id, metadata
@@ -2105,20 +2328,21 @@ class MemoryPromotionProposalsRepo:
             "source_session_id": row[1],
             "source_event_ids": _json_loads(row[2], []),
             "proposed_content": row[3] or "",
-            "tags": [tag for tag in (row[4] or "").split(",") if tag],
-            "memory_type": row[5] or "long_term",
-            "user_id": row[6] or "default",
-            "agent_id": row[7],
-            "project_path": row[8],
-            "status": row[9] or "pending",
-            "reason": row[10] or "",
-            "created_by": row[11],
-            "reviewed_by": row[12],
-            "created_at": row[13],
-            "updated_at": row[14],
-            "reviewed_at": row[15],
-            "promoted_memory_id": row[16],
-            "metadata": _json_loads(row[17], {}),
+            "cube_id": row[4],
+            "tags": [tag for tag in (row[5] or "").split(",") if tag],
+            "memory_type": row[6] or "long_term",
+            "user_id": row[7] or "default",
+            "agent_id": row[8],
+            "project_path": row[9],
+            "status": row[10] or "pending",
+            "reason": row[11] or "",
+            "created_by": row[12],
+            "reviewed_by": row[13],
+            "created_at": row[14],
+            "updated_at": row[15],
+            "reviewed_at": row[16],
+            "promoted_memory_id": row[17],
+            "metadata": _json_loads(row[18], {}),
         }
 
 
@@ -2420,6 +2644,14 @@ class CrawlJobsRepo:
                 for r in items
             ],
         }
+
+
+def context_cubes_repo() -> ContextCubesRepo:
+    return ContextCubesRepo()
+
+
+def cube_bindings_repo() -> CubeBindingsRepo:
+    return CubeBindingsRepo()
 
 
 def documents_repo() -> DocumentsRepo:

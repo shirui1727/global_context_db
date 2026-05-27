@@ -64,6 +64,7 @@ def create_improvement_task(payload: ImprovementTaskCreate) -> dict:
     row = improvement_tasks_repo().upsert(
         {
             "id": task_id,
+            "cube_id": payload.cube_id,
             "task_kind": task_kind,
             "target_domain": payload.target_domain,
             "target_id": payload.target_id,
@@ -118,6 +119,7 @@ def run_improve(payload: ImproveRequest) -> dict:
     task = create_improvement_task(
         ImprovementTaskCreate(
             task_kind=payload.task_kind,
+            cube_id=payload.cube_id,
             target_domain=payload.target_domain,
             target_id=payload.target_id,
             priority=payload.priority,
@@ -212,6 +214,7 @@ def _execute_promote_session_memory(task: dict, payload: ImproveRequest) -> dict
     proposal = create_memory_promotion(
         MemoryPromotionCreate(
             source_session_id=session["id"],
+            cube_id=session.get("cube_id"),
             source_event_ids=[event["id"]],
             proposed_content=_promotion_content(event),
             tags=_promotion_tags(event, session),

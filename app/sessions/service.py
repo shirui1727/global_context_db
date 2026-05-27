@@ -92,6 +92,7 @@ def create_session(payload: SessionCreate) -> dict:
     session_id = payload.id or _hash(f"session:{payload.source_agent}:{payload.project_path or ''}:{now}")
     row = {
         "id": session_id,
+        "cube_id": payload.cube_id,
         "source_agent": payload.source_agent,
         "project_path": payload.project_path,
         "status": status,
@@ -210,6 +211,7 @@ def _upsert_session_event_vector(row: dict, session: dict) -> None:
                 "kind": "session_event",
                 "text": text,
                 "vector": embed_text(text).tolist(),
+                "cube_id": session.get("cube_id"),
                 "source": session.get("project_path") or "",
                 "doc_id": session["id"],
                 "chunk_index": 0,
@@ -221,6 +223,7 @@ def _upsert_session_event_vector(row: dict, session: dict) -> None:
                 "trust_level": "unverified",
                 "metadata": {
                     "domain": "session",
+                    "cube_id": session.get("cube_id"),
                     "session_id": session["id"],
                     "event_type": row.get("event_type"),
                     "project_path": session.get("project_path"),

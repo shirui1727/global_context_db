@@ -11,6 +11,8 @@ class IngestRequest(BaseModel):
 class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=20)
+    cube_id: str | None = None
+    cube_ids: list[str] = Field(default_factory=list)
     context_domain: str | None = None
     kind: str | None = None
     mode: str = "context_search"
@@ -29,8 +31,36 @@ class RetrievalEvalRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
 
 
+class ContextCubeCreate(BaseModel):
+    id: str | None = None
+    name: str
+    cube_type: str = "project"
+    owner_id: str | None = None
+    visibility: str = "private"
+    status: str = "active"
+    created_by: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContextCubeUpdate(BaseModel):
+    name: str | None = None
+    cube_type: str | None = None
+    owner_id: str | None = None
+    visibility: str | None = None
+    status: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class ContextCubeBindingCreate(BaseModel):
+    target_domain: str
+    target_id: str
+    binding_kind: str = "owns"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class SessionCreate(BaseModel):
     id: str | None = None
+    cube_id: str | None = None
     source_agent: str = "unknown_agent"
     project_path: str | None = None
     status: str = "running"
@@ -41,6 +71,7 @@ class SessionCreate(BaseModel):
 
 
 class SessionUpdate(BaseModel):
+    cube_id: str | None = None
     source_agent: str | None = None
     project_path: str | None = None
     status: str | None = None
@@ -106,6 +137,7 @@ class ImprovementTaskCreate(BaseModel):
     task_kind: str
     target_domain: str
     target_id: str
+    cube_id: str | None = None
     priority: int = Field(default=50, ge=0, le=100)
     reason: str = ""
     created_by: str | None = None
@@ -125,6 +157,7 @@ class ImproveRequest(BaseModel):
     task_kind: str = "rebuild_vectors"
     target_domain: str = "system"
     target_id: str = "all"
+    cube_id: str | None = None
     execute: bool = False
     clean_legacy: bool = True
     priority: int = Field(default=50, ge=0, le=100)
@@ -137,6 +170,7 @@ class RememberRequest(BaseModel):
     content_type: str = "memory"
     content: str = ""
     source: str = "remember"
+    cube_id: str | None = None
     session_id: str | None = None
     project_path: str | None = None
     tags: list[str] = Field(default_factory=list)
@@ -150,6 +184,8 @@ class RememberRequest(BaseModel):
 class RecallRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=20)
+    cube_id: str | None = None
+    cube_ids: list[str] = Field(default_factory=list)
     session_id: str | None = None
     project_path: str | None = None
     mode: str = "context_search"
@@ -175,6 +211,7 @@ class MemoryEvidenceCreate(BaseModel):
 
 class MemoryPromotionCreate(BaseModel):
     source_session_id: str
+    cube_id: str | None = None
     source_event_ids: list[str] = Field(default_factory=list)
     proposed_content: str
     tags: list[str] = Field(default_factory=list)
@@ -207,6 +244,7 @@ class MemoryPromotionReview(BaseModel):
 
 class MemoryCreate(BaseModel):
     content: str
+    cube_id: str | None = None
     tags: list[str] = Field(default_factory=list)
     user_id: str = "default"
     agent_id: str | None = None
@@ -223,6 +261,7 @@ class MemoryCreate(BaseModel):
 
 class MemoryUpdate(BaseModel):
     content: str | None = None
+    cube_id: str | None = None
     tags: list[str] | None = None
     user_id: str | None = None
     agent_id: str | None = None
@@ -244,6 +283,7 @@ class DocumentSummary(BaseModel):
 
 class FileReferenceCreate(BaseModel):
     uri: str
+    cube_id: str | None = None
     title: str | None = None
     media_type: str | None = None
     asset_kind: str | None = None
@@ -282,6 +322,7 @@ class FileReferenceUpdate(BaseModel):
 
 class AssetCreate(BaseModel):
     uri: str
+    cube_id: str | None = None
     title: str | None = None
     summary: str = ""
     tags: list[str] = Field(default_factory=list)
@@ -303,6 +344,7 @@ class AssetCreate(BaseModel):
 
 
 class AssetUpdate(BaseModel):
+    cube_id: str | None = None
     title: str | None = None
     summary: str | None = None
     tags: list[str] | None = None
@@ -320,6 +362,8 @@ class AssetUpdate(BaseModel):
 class AssetSearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=50)
+    cube_id: str | None = None
+    cube_ids: list[str] = Field(default_factory=list)
     status: list[str] | None = None
     asset_kind: str | None = None
     trust_level: str | None = None
