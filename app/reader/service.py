@@ -141,3 +141,30 @@ def read_tool_trace_fast(
         provenance=_provenance("tool_trace", trace_id, {"origin_function": origin_function, "status": status}),
         metadata={**(metadata or {}), "trace_id": trace_id, "origin_function": origin_function, "status": status},
     )
+
+
+def reader_item_to_memory_candidate(
+    item: ReaderItem,
+    *,
+    status: str = "candidate",
+    created_by: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    source_domain = item.metadata.get("source_domain") or item.provenance.get("source_domain") or item.source_domain
+    source_id = item.metadata.get("source_id") or item.provenance.get("source_id") or item.source_id
+    candidate_id = _hash(f"memory_candidate:{item.cube_id or ''}:{source_domain}:{source_id}:{item.content}")
+    return {
+        "id": candidate_id,
+        "cube_id": item.cube_id,
+        "source_domain": source_domain,
+        "source_id": source_id,
+        "content": item.content,
+        "content_kind": item.content_kind,
+        "tags": item.tags,
+        "status": status,
+        "confidence": item.confidence,
+        "provenance": item.provenance,
+        "created_by": created_by,
+        "metadata": {**item.metadata, **(metadata or {})},
+        "promoted_memory_id": None,
+    }

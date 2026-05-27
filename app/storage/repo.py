@@ -102,6 +102,41 @@ def init_sqlite(path: Path) -> None:
     )
     conn.execute(
         """
+        create table if not exists memory_lifecycle_events (
+            id text primary key,
+            memory_id text,
+            from_status text,
+            to_status text,
+            event_kind text,
+            actor text,
+            created_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists memory_candidates (
+            id text primary key,
+            cube_id text,
+            source_domain text,
+            source_id text,
+            content text,
+            content_kind text default 'note',
+            tags text,
+            status text default 'candidate',
+            confidence real default 1.0,
+            provenance text default '{}',
+            created_by text,
+            created_at text,
+            updated_at text,
+            promoted_memory_id text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
         create table if not exists memory_feedback (
             id text primary key,
             cube_id text,
@@ -527,6 +562,14 @@ def init_sqlite(path: Path) -> None:
         },
     )
     _ensure_columns(conn, "memory_promotion_proposals", {"cube_id": "text"})
+    _ensure_columns(
+        conn,
+        "memory_candidates",
+        {
+            "cube_id": "text",
+            "promoted_memory_id": "text",
+        },
+    )
     _ensure_indexes(conn)
     conn.commit()
     conn.close()
@@ -554,6 +597,10 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         "create index if not exists idx_assets_trust on assets(trust_level)",
         "create index if not exists idx_memory_evidence_memory_id on memory_evidence(memory_id)",
         "create index if not exists idx_memory_evidence_source on memory_evidence(source_domain, source_id)",
+        "create index if not exists idx_memory_lifecycle_memory_id on memory_lifecycle_events(memory_id)",
+        "create index if not exists idx_memory_lifecycle_kind on memory_lifecycle_events(event_kind)",
+        "create index if not exists idx_memory_candidates_status on memory_candidates(status)",
+        "create index if not exists idx_memory_candidates_source on memory_candidates(source_domain, source_id)",
         "create index if not exists idx_memory_promotions_status on memory_promotion_proposals(status)",
         "create index if not exists idx_memory_promotions_session on memory_promotion_proposals(source_session_id)",
         "create index if not exists idx_asset_locations_asset_id on asset_locations(asset_id)",
@@ -620,6 +667,8 @@ def db_counts() -> dict[str, int]:
         "memories",
         "memory_versions",
         "memory_evidence",
+        "memory_lifecycle_events",
+        "memory_candidates",
         "memory_feedback",
         "memory_feedback_actions",
         "memory_promotion_proposals",
@@ -2379,6 +2428,183 @@ class MemoryEvidenceRepo:
         }
 
 
+class MemoryLifecycleEventsRepo:
+    def insert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into memory_lifecycle_events(
+                    id, memory_id, from_status, to_status, event_kind, actor, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row.get("memory_id"),
+                    row.get("from_status"),
+                    row.get("to_status"),
+                    row.get("event_kind"),
+                    row.get("actor"),
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(row["id"])
+
+    def get(self, event_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, memory_id, from_status, to_status, event_kind, actor, created_at, metadata
+                from memory_lifecycle_events
+                where id = ?
+                """,
+                (event_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_by_memory(self, memory_id: str, limit: int = 50) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, memory_id, from_status, to_status, event_kind, actor, created_at, metadata
+                from memory_lifecycle_events
+                where memory_id = ?
+                order by created_at desc, rowid desc
+                limit ?
+                """,
+                (memory_id, limit),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def list_recent(self, limit: int = 100, event_kind: str | None = None) -> list[dict]:
+        params: list[str | int] = []
+        query = """
+            select id, memory_id, from_status, to_status, event_kind, actor, created_at, metadata
+            from memory_lifecycle_events
+        """
+        if event_kind:
+            query += " where event_kind = ?"
+            params.append(event_kind)
+        query += " order by created_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "memory_id": row[1],
+            "from_status": row[2],
+            "to_status": row[3],
+            "event_kind": row[4],
+            "actor": row[5],
+            "created_at": row[6],
+            "metadata": _json_loads(row[7], {}),
+        }
+
+
+class MemoryCandidatesRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into memory_candidates(
+                    id, cube_id, source_domain, source_id, content, content_kind, tags,
+                    status, confidence, provenance, created_by, created_at, updated_at,
+                    promoted_memory_id, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    cube_id=excluded.cube_id,
+                    source_domain=excluded.source_domain,
+                    source_id=excluded.source_id,
+                    content=excluded.content,
+                    content_kind=excluded.content_kind,
+                    tags=excluded.tags,
+                    status=excluded.status,
+                    confidence=excluded.confidence,
+                    provenance=excluded.provenance,
+                    updated_at=excluded.updated_at,
+                    promoted_memory_id=coalesce(excluded.promoted_memory_id, memory_candidates.promoted_memory_id),
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("cube_id"),
+                    row.get("source_domain"),
+                    row.get("source_id"),
+                    row.get("content"),
+                    row.get("content_kind") or "note",
+                    ",".join(row.get("tags") or []),
+                    row.get("status") or "candidate",
+                    row.get("confidence", 1.0),
+                    json.dumps(row.get("provenance") or {}, ensure_ascii=False),
+                    row.get("created_by"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    row.get("promoted_memory_id"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(row["id"])
+
+    def get(self, candidate_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, cube_id, source_domain, source_id, content, content_kind, tags,
+                       status, confidence, provenance, created_by, created_at, updated_at,
+                       promoted_memory_id, metadata
+                from memory_candidates
+                where id = ?
+                """,
+                (candidate_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_recent(self, limit: int = 100, status: str | None = None, source_domain: str | None = None) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if source_domain:
+            where.append("source_domain = ?")
+            params.append(source_domain)
+        query = """
+            select id, cube_id, source_domain, source_id, content, content_kind, tags,
+                   status, confidence, provenance, created_by, created_at, updated_at,
+                   promoted_memory_id, metadata
+            from memory_candidates
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by created_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "cube_id": row[1],
+            "source_domain": row[2],
+            "source_id": row[3],
+            "content": row[4] or "",
+            "content_kind": row[5] or "note",
+            "tags": [tag for tag in (row[6] or "").split(",") if tag],
+            "status": row[7] or "candidate",
+            "confidence": row[8],
+            "provenance": _json_loads(row[9], {}),
+            "created_by": row[10],
+            "created_at": row[11],
+            "updated_at": row[12],
+            "promoted_memory_id": row[13],
+            "metadata": _json_loads(row[14], {}),
+        }
+
+
 class MemoryFeedbackRepo:
     def upsert(self, row: dict) -> dict:
         with _conn() as conn:
@@ -3021,6 +3247,14 @@ def memory_versions_repo() -> MemoryVersionsRepo:
 
 def memory_evidence_repo() -> MemoryEvidenceRepo:
     return MemoryEvidenceRepo()
+
+
+def memory_lifecycle_events_repo() -> MemoryLifecycleEventsRepo:
+    return MemoryLifecycleEventsRepo()
+
+
+def memory_candidates_repo() -> MemoryCandidatesRepo:
+    return MemoryCandidatesRepo()
 
 
 def memory_feedback_repo() -> MemoryFeedbackRepo:

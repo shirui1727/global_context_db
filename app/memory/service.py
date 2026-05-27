@@ -12,14 +12,17 @@ from app.core.schemas import (
     MemoryPromotionReview,
     MemoryPromotionUpdate,
     MemoryUpdate,
+    ReaderItem,
 )
 from app.improvements.service import create_improvement_task
-from app.reader.service import read_text_fast
+from app.reader.service import read_text_fast, reader_item_to_memory_candidate
 from app.retrieval.embedding import embed_text
 from app.storage.repo import (
     audit_logs_repo,
+    memory_candidates_repo,
     memories_repo,
     memory_evidence_repo,
+    memory_lifecycle_events_repo,
     memory_promotion_proposals_repo,
     memory_versions_repo,
     session_events_repo,
@@ -64,6 +67,49 @@ def _version(memory_id: str, row: dict, change_type: str) -> None:
             "change_type": change_type,
         }
     )
+
+
+def _record_lifecycle(
+    memory_id: str,
+    *,
+    event_kind: str,
+    from_status: str | None,
+    to_status: str | None,
+    actor: str | None,
+    metadata: dict | None = None,
+) -> dict:
+    created_at = datetime.now(timezone.utc).isoformat()
+    row = {
+        "id": sha256(
+            f"lifecycle:{created_at}:{memory_id}:{event_kind}:{from_status or ''}:{to_status or ''}:{actor or ''}".encode(
+                "utf-8"
+            )
+        ).hexdigest(),
+        "memory_id": memory_id,
+        "from_status": from_status,
+        "to_status": to_status,
+        "event_kind": event_kind,
+        "actor": actor or "unknown",
+        "created_at": created_at,
+        "metadata": metadata or {},
+    }
+    return memory_lifecycle_events_repo().insert(row)
+
+
+def _update_event_kind(current: dict, updated: dict, changes: dict) -> str:
+    old_status = current.get("status") or "active"
+    new_status = updated.get("status") or old_status
+    if new_status == "archived" and old_status != "archived":
+        return "archived"
+    if new_status == "deleted" and old_status != "deleted":
+        return "deleted"
+    if new_status == "conflicted" and old_status != "conflicted":
+        return "conflicted"
+    if new_status == "verified" or changes.get("trust_level") == "verified":
+        return "verified"
+    if new_status == "stale" and old_status != "stale":
+        return "expired"
+    return "corrected"
 
 
 def add_memory(payload: MemoryCreate) -> dict:
@@ -125,6 +171,14 @@ def add_memory(payload: MemoryCreate) -> dict:
     for evidence in payload.evidence:
         add_memory_evidence(memory_id, evidence)
     _version(memory_id, row, "created")
+    _record_lifecycle(
+        memory_id,
+        event_kind="created",
+        from_status=None,
+        to_status=payload.status,
+        actor=_actor(payload.agent_id, payload.user_id),
+        metadata={"source_kind": payload.source_kind, "cube_id": payload.cube_id},
+    )
     _audit("memory.created", memory_id, _actor(payload.agent_id, payload.user_id))
     upsert_items(
         [
@@ -149,6 +203,78 @@ def add_memory(payload: MemoryCreate) -> dict:
         ]
     )
     return {"memory_id": memory_id, "memory": memories_repo().get(memory_id), "status": "created"}
+
+
+def create_memory_candidate_from_reader(
+    item: ReaderItem,
+    *,
+    created_by: str | None = None,
+    status: str = "candidate",
+    metadata: dict | None = None,
+) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    row = reader_item_to_memory_candidate(item, status=status, created_by=created_by, metadata=metadata)
+    row.update({"created_at": now, "updated_at": now})
+    return memory_candidates_repo().upsert(row)
+
+
+def list_memory_candidates(
+    limit: int = 100,
+    status: str | None = None,
+    source_domain: str | None = None,
+) -> list[dict]:
+    return memory_candidates_repo().list_recent(limit=limit, status=status, source_domain=source_domain)
+
+
+def promote_memory_candidate(
+    candidate_id: str,
+    *,
+    reviewed_by: str | None = None,
+    trust_level: str = "verified",
+    status_on_memory: str = "active",
+) -> dict:
+    candidate = memory_candidates_repo().get(candidate_id)
+    if candidate is None:
+        raise ValueError("memory candidate not found")
+    if candidate.get("promoted_memory_id"):
+        promoted_memory = memories_repo().get(candidate["promoted_memory_id"])
+        return {"candidate": candidate, "memory_id": candidate["promoted_memory_id"], "memory": promoted_memory}
+    memory_result = add_memory(
+        MemoryCreate(
+            content=candidate["content"],
+            cube_id=candidate.get("cube_id"),
+            tags=candidate.get("tags", []),
+            status=status_on_memory,
+            source_kind="reader_candidate",
+            trust_level=trust_level,
+            metadata={
+                **candidate.get("metadata", {}),
+                "candidate_id": candidate["id"],
+                "candidate_source_domain": candidate.get("source_domain"),
+                "candidate_source_id": candidate.get("source_id"),
+                "candidate_provenance": candidate.get("provenance", {}),
+            },
+        )
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    updated_candidate = memory_candidates_repo().upsert(
+        {
+            **candidate,
+            "status": status_on_memory,
+            "updated_at": now,
+            "promoted_memory_id": memory_result["memory_id"],
+            "metadata": {**candidate.get("metadata", {}), "reviewed_by": reviewed_by},
+        }
+    )
+    _record_lifecycle(
+        memory_result["memory_id"],
+        event_kind="promoted",
+        from_status="candidate",
+        to_status=status_on_memory,
+        actor=reviewed_by or "memory_quality",
+        metadata={"candidate_id": candidate["id"], "source_domain": candidate.get("source_domain")},
+    )
+    return {"candidate": updated_candidate, "memory_id": memory_result["memory_id"], "memory": memory_result["memory"]}
 
 
 def add_memory_evidence(memory_id: str, payload: MemoryEvidenceCreate) -> dict:
@@ -505,6 +631,14 @@ def review_memory_promotion(proposal_id: str, payload: MemoryPromotionReview) ->
         }
     )
     _audit("memory_promotion.promoted", proposal_id, payload.reviewed_by or "memory_quality", {"memory_id": memory["memory_id"]})
+    _record_lifecycle(
+        memory["memory_id"],
+        event_kind="promoted",
+        from_status="candidate",
+        to_status=memory["memory"].get("status", payload.status_on_memory),
+        actor=payload.reviewed_by or "memory_quality",
+        metadata={"promotion_proposal_id": proposal_id, "source_session_id": proposal.get("source_session_id")},
+    )
     return {"proposal": promoted, "memory": memory}
 
 
@@ -574,14 +708,23 @@ def update_memory(memory_id: str, payload: MemoryUpdate) -> dict:
     current = memories_repo().get(memory_id)
     if current is None:
         raise ValueError("memory not found")
+    changes = payload.model_dump(exclude_unset=True)
     updated = {
         **current,
-        **{k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None},
+        **{k: v for k, v in changes.items() if v is not None},
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     _version(memory_id, current, "before_update")
     memories_repo().upsert(updated)
     _version(memory_id, updated, "updated")
+    _record_lifecycle(
+        memory_id,
+        event_kind=_update_event_kind(current, updated, changes),
+        from_status=current.get("status") or "active",
+        to_status=updated.get("status") or current.get("status") or "active",
+        actor=_actor(updated.get("agent_id"), updated.get("user_id")),
+        metadata={"changed_fields": sorted(k for k, value in changes.items() if value is not None)},
+    )
     _audit("memory.updated", memory_id, _actor(updated.get("agent_id"), updated.get("user_id")))
     delete_item(memory_id)
     upsert_items(
@@ -614,6 +757,13 @@ def delete_memory(memory_id: str) -> dict:
     existed = memories_repo().delete(memory_id)
     if current is not None:
         _version(memory_id, current, "deleted")
+        _record_lifecycle(
+            memory_id,
+            event_kind="deleted",
+            from_status=current.get("status") or "active",
+            to_status="deleted",
+            actor=_actor(current.get("agent_id"), current.get("user_id")),
+        )
         _audit("memory.deleted", memory_id, _actor(current.get("agent_id"), current.get("user_id")))
     delete_item(memory_id)
     return {"deleted": existed, "memory_id": memory_id}
@@ -621,6 +771,10 @@ def delete_memory(memory_id: str) -> dict:
 
 def list_memory_versions(memory_id: str, limit: int = 20) -> list[dict]:
     return memory_versions_repo().list_by_memory(memory_id, limit)
+
+
+def list_memory_lifecycle_events(memory_id: str, limit: int = 50) -> list[dict]:
+    return memory_lifecycle_events_repo().list_by_memory(memory_id, limit)
 
 
 def list_audit_logs(limit: int = 100) -> list[dict]:
