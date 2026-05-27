@@ -783,6 +783,7 @@ def gcd_ingest_text(source: str, text: str, api_key: str | None = None) -> dict[
 def gcd_add_asset(
     uri: str,
     cube_id: str | None = None,
+    writable_cube_ids: list[str] | None = None,
     title: str | None = None,
     summary: str = "",
     tags: list[str] | None = None,
@@ -809,6 +810,7 @@ def gcd_add_asset(
         AssetCreate(
             uri=uri,
             cube_id=cube_id,
+            writable_cube_ids=writable_cube_ids or [],
             title=title,
             summary=summary,
             tags=tags or [],

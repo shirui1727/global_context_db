@@ -1014,3 +1014,34 @@ git add app tests docs
 git commit -m "feat: add writable cube fan out"
 git push
 ```
+
+
+---
+
+## Task 17: Asset writable cube fan-out
+
+Goal: extend MemOS-style `writable_cube_ids` semantics from memories to governed NAS assets while preserving the external-worker manifest boundary.
+
+- [x] RED test: `AssetCreate(writable_cube_ids=[project, shared])` creates separate cube-scoped assets with the same display `asset_key`.
+- [x] Add `writable_cube_ids` to `AssetCreate` while keeping `cube_id` backward-compatible.
+- [x] Make `create_asset()` fan out to each writable cube using cube-scoped internal identity so locations/versions do not collapse across cubes.
+- [x] Expose `writable_cube_ids` on MCP `gcd_add_asset`; REST already accepts the schema field.
+- [x] Keep NAS-first boundary: no OCR/ASR/ffmpeg/PDF processing added to the main service.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_assets.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+Commit:
+
+```powershell
+git add app tests docs
+git commit -m "feat: add asset writable cube fan out"
+git push
+```

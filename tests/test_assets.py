@@ -292,3 +292,40 @@ def test_improve_reindex_asset_updates_analysis_status(asset_env):
     assert improved["task"]["status"] == "done"
     assert improved["result"]["asset"]["id"] == asset["id"]
     assert improved["result"]["asset"]["analysis_status"] == "indexed"
+
+
+def test_writable_cube_ids_fan_out_asset_writes(asset_env):
+    from app.cubes.service import create_cube
+    from app.core.schemas import ContextCubeCreate
+    from app.storage.repo import assets_repo
+
+    project = create_cube(ContextCubeCreate(name="Asset Writable Project", cube_type="project", owner_id="asset-project"))
+    shared = create_cube(ContextCubeCreate(name="Asset Writable Shared", cube_type="shared", owner_id="asset-team", visibility="shared"))
+
+    result = create_asset(
+        AssetCreate(
+            uri="smb://NAS/assets/fanout.png",
+            asset_key="fanout:asset",
+            checksum="sha-fanout",
+            summary="Writable cube fan-out asset.",
+            writable_cube_ids=[project["id"], shared["id"]],
+            asset_kind="image",
+            trust_level="verified",
+        )
+    )
+    assets = assets_repo().list_recent(limit=20)
+    by_cube = {asset["cube_id"]: asset for asset in assets}
+
+    assert result["write_scope"]["writable_cube_ids"] == [project["id"], shared["id"]]
+    assert result["write_scope"]["written_count"] == 2
+    assert project["id"] in by_cube
+    assert shared["id"] in by_cube
+    assert by_cube[project["id"]]["asset_key"] == "fanout:asset"
+    assert by_cube[shared["id"]]["asset_key"] == "fanout:asset"
+    assert by_cube[project["id"]]["id"] != by_cube[shared["id"]]["id"]
+
+    project_search = search_assets(AssetSearchRequest(query="fan-out asset", top_k=10, cube_id=project["id"]))
+    shared_search = search_assets(AssetSearchRequest(query="fan-out asset", top_k=10, cube_id=shared["id"]))
+
+    assert by_cube[project["id"]]["id"] in {item["id"] for item in project_search["results"]}
+    assert by_cube[shared["id"]]["id"] in {item["id"] for item in shared_search["results"]}

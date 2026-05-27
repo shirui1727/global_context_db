@@ -416,6 +416,7 @@ class FileReferenceUpdate(BaseModel):
 class AssetCreate(BaseModel):
     uri: str
     cube_id: str | None = None
+    writable_cube_ids: list[str] = Field(default_factory=list)
     title: str | None = None
     summary: str = ""
     tags: list[str] = Field(default_factory=list)

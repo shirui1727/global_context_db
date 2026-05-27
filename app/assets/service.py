@@ -60,6 +60,17 @@ def _hash(value: str) -> str:
     return sha256(value.encode("utf-8")).hexdigest()
 
 
+def _unique_values(values: list[str] | None) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values or []:
+        normalized = str(value).strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result
+
+
 def _normalize_uri(uri: str) -> str:
     return uri.strip().replace("\\", "/")
 
@@ -338,7 +349,59 @@ def _ensure_version(payload: AssetCreate, asset_id: str, uri_normalized: str, no
     return row, changed
 
 
+def _asset_identity_payload(payload: AssetCreate, cube_id: str | None = None) -> tuple[str | None, str | None]:
+    if cube_id is None:
+        return payload.asset_key, payload.checksum
+    scoped_suffix = _hash(f"cube-scope:{cube_id}")[:12]
+    asset_key = f"{payload.asset_key}@{scoped_suffix}" if payload.asset_key else None
+    checksum = f"{payload.checksum}@{scoped_suffix}" if payload.checksum else None
+    return asset_key, checksum
+
+
 def create_asset(payload: AssetCreate) -> dict:
+    writable_cube_ids = _unique_values(payload.writable_cube_ids)
+    if writable_cube_ids:
+        results = []
+        for writable_cube_id in writable_cube_ids:
+            scoped_asset_key, scoped_checksum = _asset_identity_payload(payload, writable_cube_id)
+            scoped_metadata = {
+                **payload.metadata,
+                "unscoped_asset_key": payload.asset_key,
+                "unscoped_checksum": payload.checksum,
+                "writable_cube_fanout": True,
+            }
+            scoped_payload = payload.model_copy(
+                update={
+                    "cube_id": writable_cube_id,
+                    "writable_cube_ids": [],
+                    "asset_key": scoped_asset_key,
+                    "checksum": scoped_checksum,
+                    "metadata": scoped_metadata,
+                }
+            )
+            created = create_asset(scoped_payload)
+            if payload.asset_key:
+                created["asset_key"] = payload.asset_key
+            results.append(created)
+        primary = results[0] if results else {}
+        return {
+            **primary,
+            "assets": results,
+            "write_scope": {
+                "writable_cube_ids": writable_cube_ids,
+                "written_count": len(results),
+                "results": [
+                    {
+                        "cube_id": asset.get("cube_id"),
+                        "asset_id": asset.get("id"),
+                        "asset_key": payload.asset_key or asset.get("asset_key"),
+                        "status": asset.get("status"),
+                    }
+                    for asset in results
+                ],
+            },
+        }
+
     actor = payload.created_by or payload.source_kind or "asset_writer"
     _check_uri_allowed(payload.uri, actor)
     _validate(payload.status, ASSET_STATUSES, "status")
@@ -365,11 +428,12 @@ def create_asset(payload: AssetCreate) -> dict:
     version, version_changed = _ensure_version(payload, asset_id, identity["uri_normalized"], now)
     status = "stale" if version_changed else payload.status
     analysis_status = "needs_reindex" if version_changed else payload.analysis_status
+    display_asset_key = payload.metadata.get("unscoped_asset_key") or payload.asset_key or identity["asset_key"]
     assets_repo().upsert(
         {
             "id": asset_id,
             "cube_id": cube_id,
-            "asset_key": identity["asset_key"],
+            "asset_key": display_asset_key,
             "asset_kind": payload.asset_kind or "generic_asset",
             "title": title,
             "summary": payload.summary,
@@ -387,7 +451,7 @@ def create_asset(payload: AssetCreate) -> dict:
             "metadata": {**payload.metadata, "identity_source": identity["identity_source"]},
         }
     )
-    location_id = _hash(f"location:{identity['uri_normalized'].lower()}")
+    location_id = _hash(f"location:{asset_id}:{identity['uri_normalized'].lower()}")
     asset_locations_repo().upsert(
         {
             "id": location_id,
@@ -411,7 +475,7 @@ def create_asset(payload: AssetCreate) -> dict:
         actor,
         {
             "uri": payload.uri,
-            "asset_key": identity["asset_key"],
+            "asset_key": display_asset_key,
             "identity_source": identity["identity_source"],
             "version_id": version["id"],
             "version_changed": version_changed,
@@ -423,7 +487,7 @@ def create_asset(payload: AssetCreate) -> dict:
         source_id=asset_id,
         payload={
             "asset_id": asset_id,
-            "asset_key": identity["asset_key"],
+            "asset_key": display_asset_key,
             "cube_id": cube_id,
             "status": status,
             "analysis_status": analysis_status,
