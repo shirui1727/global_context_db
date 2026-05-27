@@ -1,5 +1,6 @@
 ﻿from datetime import UTC, datetime
 from hashlib import sha256
+from pathlib import PurePosixPath
 
 from app.core.schemas import ContextCubeBindingCreate, ContextCubeCreate, ContextCubeUpdate
 from app.storage.repo import context_cubes_repo, cube_bindings_repo
@@ -45,6 +46,95 @@ def create_cube(payload: ContextCubeCreate) -> dict:
             "metadata": payload.metadata,
         }
     )
+
+
+def resolve_default_cube(
+    *,
+    cube_id: str | None = None,
+    session_id: str | None = None,
+    project_path: str | None = None,
+    agent_id: str | None = None,
+    user_id: str | None = None,
+    created_by: str | None = None,
+) -> str | None:
+    if cube_id:
+        return cube_id
+    if session_id:
+        from app.storage.repo import agent_sessions_repo
+
+        session = agent_sessions_repo().get(session_id)
+        if session and session.get("cube_id"):
+            return session["cube_id"]
+        if session and session.get("project_path"):
+            return _ensure_default_cube(
+                cube_type="project",
+                owner_id=_owner("project", session["project_path"]),
+                name=_project_name(session["project_path"]),
+                created_by=created_by or session.get("created_by") or session.get("source_agent"),
+                metadata={"resolver": "session_project", "project_path": session["project_path"], "session_id": session_id},
+            )
+    if project_path:
+        return _ensure_default_cube(
+            cube_type="project",
+            owner_id=_owner("project", project_path),
+            name=_project_name(project_path),
+            created_by=created_by or agent_id,
+            metadata={"resolver": "project_path", "project_path": project_path},
+        )
+    if agent_id:
+        return _ensure_default_cube(
+            cube_type="agent",
+            owner_id=_owner("agent", agent_id),
+            name=f"Agent: {agent_id}",
+            created_by=created_by or agent_id,
+            metadata={"resolver": "agent_id", "agent_id": agent_id},
+        )
+    if user_id:
+        return _ensure_default_cube(
+            cube_type="user",
+            owner_id=_owner("user", user_id),
+            name=f"User: {user_id}",
+            created_by=created_by or user_id,
+            metadata={"resolver": "user_id", "user_id": user_id},
+        )
+    return None
+
+
+def _ensure_default_cube(
+    *,
+    cube_type: str,
+    owner_id: str,
+    name: str,
+    created_by: str | None,
+    metadata: dict,
+) -> str:
+    cube_id = _hash(f"cube:{cube_type}:{owner_id}:{name}")
+    existing = context_cubes_repo().get(cube_id)
+    if existing:
+        return cube_id
+    create_cube(
+        ContextCubeCreate(
+            id=cube_id,
+            name=name,
+            cube_type=cube_type,
+            owner_id=owner_id,
+            visibility="private",
+            created_by=created_by,
+            metadata={**metadata, "auto_resolved": True},
+        )
+    )
+    return cube_id
+
+
+def _owner(kind: str, value: str) -> str:
+    return f"{kind}:{value.strip().replace(chr(92), '/')}"
+
+
+def _project_name(project_path: str) -> str:
+    normalized = project_path.strip().replace("\\", "/").rstrip("/")
+    if not normalized:
+        return "Project: unknown"
+    return f"Project: {PurePosixPath(normalized).name or normalized}"
 
 
 def get_cube(cube_id: str) -> dict:

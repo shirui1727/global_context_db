@@ -15,6 +15,7 @@ from app.core.schemas import (
     FileReferenceCreate,
     FileReferenceUpdate,
 )
+from app.cubes.service import resolve_default_cube
 from app.improvements.service import create_improvement_task
 from app.hooks.service import emit_domain_event
 from app.reader.service import read_asset_manifest_fast
@@ -355,13 +356,19 @@ def create_asset(payload: AssetCreate) -> dict:
         trust_level = existing["trust_level"]
 
     title = payload.title or identity["uri_normalized"].rsplit("/", 1)[-1]
+    cube_id = resolve_default_cube(
+        cube_id=payload.cube_id,
+        project_path=payload.metadata.get("project_path") if isinstance(payload.metadata, dict) else None,
+        agent_id=payload.created_by,
+        created_by=actor,
+    )
     version, version_changed = _ensure_version(payload, asset_id, identity["uri_normalized"], now)
     status = "stale" if version_changed else payload.status
     analysis_status = "needs_reindex" if version_changed else payload.analysis_status
     assets_repo().upsert(
         {
             "id": asset_id,
-            "cube_id": payload.cube_id,
+            "cube_id": cube_id,
             "asset_key": identity["asset_key"],
             "asset_kind": payload.asset_kind or "generic_asset",
             "title": title,
@@ -417,7 +424,7 @@ def create_asset(payload: AssetCreate) -> dict:
         payload={
             "asset_id": asset_id,
             "asset_key": identity["asset_key"],
-            "cube_id": payload.cube_id,
+            "cube_id": cube_id,
             "status": status,
             "analysis_status": analysis_status,
             "version_id": version["id"],

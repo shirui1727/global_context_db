@@ -11,6 +11,7 @@ from app.core.schemas import (
     SessionTraceCreate,
     SessionUpdate,
 )
+from app.cubes.service import resolve_default_cube
 from app.hooks.service import emit_domain_event
 from app.memory.service import search_memory
 from app.reader.service import read_session_event_fast, read_tool_trace_fast
@@ -92,9 +93,15 @@ def create_session(payload: SessionCreate) -> dict:
     now = _now()
     status = _validate_status(payload.status)
     session_id = payload.id or _hash(f"session:{payload.source_agent}:{payload.project_path or ''}:{now}")
+    cube_id = resolve_default_cube(
+        cube_id=payload.cube_id,
+        project_path=payload.project_path,
+        agent_id=payload.source_agent,
+        created_by=payload.created_by or payload.source_agent,
+    )
     row = {
         "id": session_id,
-        "cube_id": payload.cube_id,
+        "cube_id": cube_id,
         "source_agent": payload.source_agent,
         "project_path": payload.project_path,
         "status": status,
@@ -122,7 +129,7 @@ def create_session(payload: SessionCreate) -> dict:
         "session.created",
         source_kind="session",
         source_id=session_id,
-        payload={"session_id": session_id, "cube_id": payload.cube_id, "source_agent": payload.source_agent, "project_path": payload.project_path, "status": status},
+        payload={"session_id": session_id, "cube_id": cube_id, "source_agent": payload.source_agent, "project_path": payload.project_path, "status": status},
     )
     return get_session(session_id)
 

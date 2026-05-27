@@ -896,3 +896,32 @@ git add app tests docs
 git commit -m "feat: emit hooks from domain services"
 git push
 ```
+
+---
+
+## Task 13: Default cube resolver
+
+Goal: make Context Cubes usable by default instead of requiring callers to pass `cube_id` everywhere.
+
+- [x] RED test: session creation without `cube_id` gets a project cube, session-scoped memory inherits it, project asset inherits it, and agent-only memory gets an agent cube.
+- [x] Add `resolve_default_cube()` with precedence: explicit cube -> session cube/project -> project path -> agent -> user.
+- [x] Auto-create deterministic project/agent/user cubes with `metadata.auto_resolved=true`.
+- [x] Wire resolver into `create_session()`, `add_memory()`, and `create_asset()`.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_cubes.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+Commit:
+
+```powershell
+git add app tests docs
+git commit -m "feat: add default cube resolver"
+git push
+```

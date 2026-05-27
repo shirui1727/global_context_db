@@ -143,3 +143,39 @@ def test_cube_search_isolation_and_explicit_shared_cube(cube_env):
     assert "blue marble" in only_a_text
     assert "green slate" not in only_a_text
     assert "soft global illumination" in shared_text
+
+
+def test_default_cube_resolver_assigns_session_project_and_agent_scopes(cube_env):
+    from app.assets.service import create_asset
+    from app.core.schemas import AssetCreate, MemoryCreate, SessionCreate
+    from app.cubes.service import list_cubes
+    from app.memory.service import add_memory
+    from app.sessions.service import create_session
+
+    session = create_session(SessionCreate(source_agent="codex", project_path="S:/client-a", title="Client A"))
+    memory = add_memory(
+        MemoryCreate(
+            content="Session-scoped memory inherits the session cube.",
+            session_id=session["id"],
+            agent_id="codex",
+        )
+    )["memory"]
+    project_asset = create_asset(
+        AssetCreate(
+            uri="file:///S:/client-a/ref.png",
+            asset_key="client-a-ref",
+            checksum="client-a-ref-checksum",
+            summary="Project asset inherits the project cube.",
+            metadata={"project_path": "S:/client-a"},
+        )
+    )
+    agent_memory = add_memory(MemoryCreate(content="Agent-scoped memory gets an agent cube.", agent_id="codex"))["memory"]
+    cubes = list_cubes(limit=20)
+
+    assert session["cube_id"]
+    assert memory["cube_id"] == session["cube_id"]
+    assert project_asset["cube_id"] == session["cube_id"]
+    assert agent_memory["cube_id"]
+    assert agent_memory["cube_id"] != session["cube_id"]
+    assert any(cube["id"] == session["cube_id"] and cube["cube_type"] == "project" for cube in cubes)
+    assert any(cube["id"] == agent_memory["cube_id"] and cube["cube_type"] == "agent" for cube in cubes)

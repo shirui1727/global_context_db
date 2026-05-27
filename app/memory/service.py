@@ -15,6 +15,7 @@ from app.core.schemas import (
     MemoryUpdate,
     ReaderItem,
 )
+from app.cubes.service import resolve_default_cube
 from app.improvements.service import create_improvement_task
 from app.hooks.service import emit_domain_event
 from app.reader.service import read_text_fast, read_text_fine, reader_item_to_memory_candidate
@@ -116,6 +117,13 @@ def _update_event_kind(current: dict, updated: dict, changes: dict) -> str:
 
 def add_memory(payload: MemoryCreate) -> dict:
     now = datetime.now(timezone.utc).isoformat()
+    cube_id = resolve_default_cube(
+        cube_id=payload.cube_id,
+        session_id=payload.session_id,
+        agent_id=payload.agent_id,
+        user_id=payload.user_id,
+        created_by=payload.agent_id or payload.user_id,
+    )
     memory_id = sha256(
         "|".join(
             [
@@ -131,7 +139,7 @@ def add_memory(payload: MemoryCreate) -> dict:
     reader_item = read_text_fast(
         source=payload.source_kind,
         text=payload.content,
-        cube_id=payload.cube_id,
+        cube_id=cube_id,
         tags=payload.tags,
         metadata={**payload.metadata, "source_domain": "memory"},
     )
@@ -147,7 +155,7 @@ def add_memory(payload: MemoryCreate) -> dict:
     row = {
         "id": memory_id,
         "content": payload.content,
-        "cube_id": payload.cube_id,
+        "cube_id": cube_id,
         "tags": payload.tags,
         "user_id": payload.user_id,
         "agent_id": payload.agent_id,
@@ -181,7 +189,7 @@ def add_memory(payload: MemoryCreate) -> dict:
         from_status=None,
         to_status=payload.status,
         actor=_actor(payload.agent_id, payload.user_id),
-        metadata={"source_kind": payload.source_kind, "cube_id": payload.cube_id},
+        metadata={"source_kind": payload.source_kind, "cube_id": cube_id},
     )
     _audit("memory.created", memory_id, _actor(payload.agent_id, payload.user_id))
     upsert_items(
@@ -191,7 +199,7 @@ def add_memory(payload: MemoryCreate) -> dict:
                 "kind": "memory",
                 "text": payload.content,
                 "vector": embed_text(payload.content).tolist(),
-                "cube_id": payload.cube_id,
+                "cube_id": cube_id,
                 "tags": payload.tags,
                 "user_id": payload.user_id,
                 "agent_id": payload.agent_id,
@@ -213,7 +221,7 @@ def add_memory(payload: MemoryCreate) -> dict:
         source_id=memory_id,
         payload={
             "memory_id": memory_id,
-            "cube_id": payload.cube_id,
+            "cube_id": cube_id,
             "status": payload.status,
             "source_kind": payload.source_kind,
             "trust_level": payload.trust_level,
