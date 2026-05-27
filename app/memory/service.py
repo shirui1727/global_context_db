@@ -134,10 +134,12 @@ def add_memory(payload: MemoryCreate) -> dict:
         metadata={**payload.metadata, "source_domain": "memory"},
     )
     reader_metadata = {
+        **(reader_item.metadata.get("reader") if isinstance(reader_item.metadata.get("reader"), dict) else {}),
         "source_domain": "memory",
         "source_id": memory_id,
         "content_kind": reader_item.content_kind,
         "provenance": {**reader_item.provenance, "source_domain": "memory", "source_id": memory_id},
+        "evidence_count": len(reader_item.evidence),
     }
     metadata = {**payload.metadata, "reader": reader_metadata}
     row = {
@@ -254,6 +256,17 @@ def promote_memory_candidate(
                 "candidate_source_id": candidate.get("source_id"),
                 "candidate_provenance": candidate.get("provenance", {}),
             },
+            evidence=[
+                MemoryEvidenceCreate(
+                    source_domain=evidence.get("source_domain") or candidate.get("source_domain"),
+                    source_id=evidence.get("source_id") or candidate.get("source_id"),
+                    quote=evidence.get("quote", ""),
+                    confidence=evidence.get("confidence", candidate.get("confidence", 1.0)),
+                    source_span=evidence.get("source_span"),
+                    metadata={**(evidence.get("metadata") or {}), "candidate_id": candidate["id"]},
+                )
+                for evidence in candidate.get("evidence", [])
+            ],
         )
     )
     now = datetime.now(timezone.utc).isoformat()
@@ -291,6 +304,7 @@ def add_memory_evidence(memory_id: str, payload: MemoryEvidenceCreate) -> dict:
         "source_id": payload.source_id,
         "quote": payload.quote,
         "confidence": payload.confidence,
+        "source_span": payload.source_span.model_dump() if payload.source_span is not None else {},
         "created_at": now,
         "metadata": payload.metadata,
     }

@@ -20,6 +20,11 @@ from app.reader.service import (
 from app.retrieval.service import search_context
 from app.sessions.service import add_session_event, create_session
 from app.storage.bootstrap import bootstrap, reset_bootstrap
+from app.memory.service import (
+    create_memory_candidate_from_reader,
+    list_memory_evidence,
+    promote_memory_candidate,
+)
 
 
 @pytest.fixture()
@@ -102,6 +107,54 @@ def test_reader_fast_modes_emit_standard_items(reader_env):
     assert trace_item.source_domain == "tool_trace"
     assert trace_item.content_kind == "trace"
     assert "search" in trace_item.content
+
+
+def test_reader_fast_modes_emit_evidence_spans(reader_env):
+    text = "Reader span evidence pins the exact quote."
+    text_item = read_text_fast(source="manual-note", text=text, metadata={"origin": "span-test"})
+    session_item = read_session_event_fast(
+        session_id="session-span",
+        event_type="user_prompt",
+        content="Please preserve this exact session quote.",
+        role="user",
+        event_id="event-span-1",
+    )
+
+    assert text_item.evidence[0].source_domain == "document"
+    assert text_item.evidence[0].source_id == text_item.source_id
+    assert text_item.evidence[0].quote == text
+    assert text_item.evidence[0].source_span is not None
+    assert text_item.evidence[0].source_span.start == 0
+    assert text_item.evidence[0].source_span.end == len(text)
+    assert text_item.evidence[0].source_span.quote_hash
+    assert text_item.metadata["reader"]["evidence_count"] == 1
+
+    session_evidence = session_item.evidence[0]
+    assert session_evidence.source_domain == "session_event"
+    assert session_evidence.source_id == "event-span-1"
+    assert session_evidence.quote == "Please preserve this exact session quote."
+    assert session_evidence.source_span.start == session_item.content.index(session_evidence.quote)
+    assert session_evidence.source_span.end == session_evidence.source_span.start + len(session_evidence.quote)
+
+
+def test_reader_candidate_promotion_persists_evidence_span(reader_env):
+    reader_item = read_text_fast(
+        source="candidate-source",
+        text="Candidate promotion should preserve source-span evidence.",
+        cube_id="cube-span",
+        tags=["candidate", "span"],
+    )
+
+    candidate = create_memory_candidate_from_reader(reader_item, created_by="reader-test")
+    promoted = promote_memory_candidate(candidate["id"], reviewed_by="reviewer")
+    evidence = list_memory_evidence(promoted["memory_id"])
+
+    assert candidate["evidence"][0]["quote"] == "Candidate promotion should preserve source-span evidence."
+    assert candidate["metadata"]["reader"]["evidence_count"] == 1
+    assert evidence[0]["source_domain"] == "document"
+    assert evidence[0]["quote"] == "Candidate promotion should preserve source-span evidence."
+    assert evidence[0]["source_span"]["start"] == 0
+    assert evidence[0]["source_span"]["end"] == len(evidence[0]["quote"])
 
 
 def test_reader_integration_tags_vectors_with_reader_metadata(reader_env):

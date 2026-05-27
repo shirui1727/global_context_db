@@ -61,6 +61,24 @@ class ContextCubeBindingCreate(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ReaderEvidenceSpan(BaseModel):
+    span_type: str = "char"
+    start: int | None = Field(default=None, ge=0)
+    end: int | None = Field(default=None, ge=0)
+    quote_hash: str | None = None
+    selector: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReaderEvidence(BaseModel):
+    source_domain: str
+    source_id: str
+    quote: str = ""
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    source_span: ReaderEvidenceSpan | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ReaderItem(BaseModel):
     source_domain: str
     source_id: str
@@ -70,6 +88,7 @@ class ReaderItem(BaseModel):
     tags: list[str] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0, le=1)
     provenance: dict[str, Any] = Field(default_factory=dict)
+    evidence: list[ReaderEvidence] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -248,6 +267,7 @@ class MemoryEvidenceCreate(BaseModel):
     source_id: str
     quote: str = ""
     confidence: float = Field(default=1.0, ge=0, le=1)
+    source_span: ReaderEvidenceSpan | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -52,7 +52,7 @@ MemOS 把输入先读成统一 memory item，再进入存储/检索/治理。这
 
 - reader output 进入 `memory_candidates`。（已完成）
 - 通过 REST/MCP 暴露 candidate 创建、列表、promotion 和 lifecycle 查询。（已完成）
-- 增加 evidence/provenance/span 字段规范。
+- 增加 evidence/provenance/span 字段规范。（已完成：`ReaderEvidence`、`ReaderEvidenceSpan`、`memory_evidence.source_span`）
 - fine mode 后置：LLM 抽取、幻觉过滤、evidence quote。
 
 ### 2.3 MemScheduler → SQLite Scheduler（下一阶段最高优先级）
@@ -216,14 +216,15 @@ conflicted
 5. Runtime Components + Handlers。
 6. Lifecycle events + reader candidates。
 7. Lifecycle/candidate REST + MCP 调用面。
+8. Reader evidence/provenance/span 规范。
 
 ### 再下一轮
 
-8. Reader fine mode。
-9. LLM feedback action proposal。
-10. Redis scheduler。
-11. Hook/plugin runtime。
-12. dashboard / graph memory。
+9. Reader fine mode。
+10. LLM feedback action proposal。
+11. Redis scheduler。
+12. Hook/plugin runtime。
+13. dashboard / graph memory。
 
 ---
 

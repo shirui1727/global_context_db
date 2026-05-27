@@ -613,7 +613,64 @@ git push
 
 ---
 
-## 8. 每阶段验收门槛
+## Task 8: Reader evidence/provenance/span 规范
+
+**Files:**
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\core\schemas.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\reader\service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\memory\service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_reader.py`
+
+- [x] **Step 1: TDD 覆盖 Reader evidence span**
+
+新增测试确认 `read_text_fast()` 和 `read_session_event_fast()` 输出：
+
+```text
+ReaderItem.evidence[]
+ReaderEvidence.source_domain/source_id/quote/confidence
+ReaderEvidenceSpan.start/end/quote_hash
+metadata.reader.evidence_count
+```
+
+- [x] **Step 2: TDD 覆盖 candidate promotion 保留 evidence**
+
+新增测试确认 `ReaderItem -> memory_candidate -> promote_memory_candidate()` 后，`memory_evidence` 能保留原始 quote 和 `source_span`。
+
+- [x] **Step 3: Schema 规范**
+
+新增：
+
+```text
+ReaderEvidenceSpan
+ReaderEvidence
+ReaderItem.evidence
+MemoryEvidenceCreate.source_span
+```
+
+- [x] **Step 4: SQLite 兼容扩展**
+
+新增/自愈字段：
+
+```text
+memory_evidence.source_span
+memory_candidates.evidence
+```
+
+- [x] **Step 5: 验证提交**
+
+```powershell
+python -m pytest tests\test_reader.py -q
+python -m pytest -q
+python -m compileall app tools
+git add app tests docs
+git commit -m "feat: standardize reader evidence spans"
+git push
+```
+
+---
+
+## 9. 每阶段验收门槛
 
 每个阶段完成前必须跑：
 
@@ -632,7 +689,7 @@ git diff --check
 
 ---
 
-## 9. 后续阶段触发条件
+## 10. 后续阶段触发条件
 
 - Scheduler SQLite 连续通过本地和 NAS 运行验证后，再做 Redis Streams。
 - Feedback 手动 apply 被实际使用后，再加 LLM action proposal。

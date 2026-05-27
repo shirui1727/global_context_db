@@ -95,6 +95,7 @@ def init_sqlite(path: Path) -> None:
             source_id text,
             quote text,
             confidence real default 1.0,
+            source_span text default '{}',
             created_at text,
             metadata text default '{}'
         )
@@ -127,6 +128,7 @@ def init_sqlite(path: Path) -> None:
             status text default 'candidate',
             confidence real default 1.0,
             provenance text default '{}',
+            evidence text default '[]',
             created_by text,
             created_at text,
             updated_at text,
@@ -562,12 +564,14 @@ def init_sqlite(path: Path) -> None:
         },
     )
     _ensure_columns(conn, "memory_promotion_proposals", {"cube_id": "text"})
+    _ensure_columns(conn, "memory_evidence", {"source_span": "text default '{}'"})
     _ensure_columns(
         conn,
         "memory_candidates",
         {
             "cube_id": "text",
             "promoted_memory_id": "text",
+            "evidence": "text default '[]'",
         },
     )
     _ensure_indexes(conn)
@@ -2373,8 +2377,8 @@ class MemoryEvidenceRepo:
             conn.execute(
                 """
                 insert or replace into memory_evidence(
-                    id, memory_id, source_domain, source_id, quote, confidence, created_at, metadata
-                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                    id, memory_id, source_domain, source_id, quote, confidence, source_span, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row["id"],
@@ -2383,6 +2387,7 @@ class MemoryEvidenceRepo:
                     row.get("source_id"),
                     row.get("quote"),
                     row.get("confidence", 1.0),
+                    json.dumps(row.get("source_span") or {}, ensure_ascii=False),
                     row.get("created_at"),
                     json.dumps(row.get("metadata") or {}, ensure_ascii=False),
                 ),
@@ -2392,7 +2397,7 @@ class MemoryEvidenceRepo:
         with _conn() as conn:
             rows = conn.execute(
                 """
-                select id, memory_id, source_domain, source_id, quote, confidence, created_at, metadata
+                select id, memory_id, source_domain, source_id, quote, confidence, source_span, created_at, metadata
                 from memory_evidence
                 where memory_id = ?
                 order by created_at desc, rowid desc
@@ -2406,7 +2411,7 @@ class MemoryEvidenceRepo:
         with _conn() as conn:
             rows = conn.execute(
                 """
-                select id, memory_id, source_domain, source_id, quote, confidence, created_at, metadata
+                select id, memory_id, source_domain, source_id, quote, confidence, source_span, created_at, metadata
                 from memory_evidence
                 order by created_at desc, rowid desc
                 limit ?
@@ -2423,8 +2428,9 @@ class MemoryEvidenceRepo:
             "source_id": row[3],
             "quote": row[4] or "",
             "confidence": row[5],
-            "created_at": row[6],
-            "metadata": _json_loads(row[7], {}),
+            "source_span": _json_loads(row[6], {}),
+            "created_at": row[7],
+            "metadata": _json_loads(row[8], {}),
         }
 
 
@@ -2511,9 +2517,9 @@ class MemoryCandidatesRepo:
                 """
                 insert into memory_candidates(
                     id, cube_id, source_domain, source_id, content, content_kind, tags,
-                    status, confidence, provenance, created_by, created_at, updated_at,
+                    status, confidence, provenance, evidence, created_by, created_at, updated_at,
                     promoted_memory_id, metadata
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(id) do update set
                     cube_id=excluded.cube_id,
                     source_domain=excluded.source_domain,
@@ -2524,6 +2530,7 @@ class MemoryCandidatesRepo:
                     status=excluded.status,
                     confidence=excluded.confidence,
                     provenance=excluded.provenance,
+                    evidence=excluded.evidence,
                     updated_at=excluded.updated_at,
                     promoted_memory_id=coalesce(excluded.promoted_memory_id, memory_candidates.promoted_memory_id),
                     metadata=excluded.metadata
@@ -2539,6 +2546,7 @@ class MemoryCandidatesRepo:
                     row.get("status") or "candidate",
                     row.get("confidence", 1.0),
                     json.dumps(row.get("provenance") or {}, ensure_ascii=False),
+                    json.dumps(row.get("evidence") or [], ensure_ascii=False),
                     row.get("created_by"),
                     row.get("created_at"),
                     row.get("updated_at"),
@@ -2553,7 +2561,7 @@ class MemoryCandidatesRepo:
             row = conn.execute(
                 """
                 select id, cube_id, source_domain, source_id, content, content_kind, tags,
-                       status, confidence, provenance, created_by, created_at, updated_at,
+                       status, confidence, provenance, evidence, created_by, created_at, updated_at,
                        promoted_memory_id, metadata
                 from memory_candidates
                 where id = ?
@@ -2573,7 +2581,7 @@ class MemoryCandidatesRepo:
             params.append(source_domain)
         query = """
             select id, cube_id, source_domain, source_id, content, content_kind, tags,
-                   status, confidence, provenance, created_by, created_at, updated_at,
+                   status, confidence, provenance, evidence, created_by, created_at, updated_at,
                    promoted_memory_id, metadata
             from memory_candidates
         """
@@ -2597,11 +2605,12 @@ class MemoryCandidatesRepo:
             "status": row[7] or "candidate",
             "confidence": row[8],
             "provenance": _json_loads(row[9], {}),
-            "created_by": row[10],
-            "created_at": row[11],
-            "updated_at": row[12],
-            "promoted_memory_id": row[13],
-            "metadata": _json_loads(row[14], {}),
+            "evidence": _json_loads(row[10], []),
+            "created_by": row[11],
+            "created_at": row[12],
+            "updated_at": row[13],
+            "promoted_memory_id": row[14],
+            "metadata": _json_loads(row[15], {}),
         }
 
 
