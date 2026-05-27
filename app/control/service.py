@@ -80,6 +80,7 @@ def recall(payload: RecallRequest) -> dict:
         payload.top_k,
         cube_id=payload.cube_id,
         cube_ids=payload.cube_ids,
+        readable_cube_ids=payload.readable_cube_ids,
         mode=payload.mode,
         context_budget_chars=payload.context_budget_chars,
     )

@@ -324,3 +324,34 @@ def test_remember_uses_writable_cube_ids_for_memory_and_asset(cube_env):
     assert asset_result["result"]["write_scope"]["writable_cube_ids"] == [project["id"], shared["id"]]
     assert project["id"] in assets_by_cube
     assert shared["id"] in assets_by_cube
+
+
+def test_readable_cube_ids_alias_for_recall_and_context_search(cube_env):
+    from app.control.service import recall
+    from app.core.schemas import RecallRequest
+    from app.cubes.service import create_cube
+    from app.memory.service import add_memory
+    from app.retrieval.service import search_context
+
+    project = create_cube(ContextCubeCreate(name="Readable Project", cube_type="project", owner_id="readable-project"))
+    explicit = create_cube(ContextCubeCreate(name="Readable Explicit", cube_type="project", owner_id="readable-explicit"))
+    other = create_cube(ContextCubeCreate(name="Unreadable Other", cube_type="project", owner_id="readable-other"))
+
+    add_memory(MemoryCreate(cube_id=project["id"], content="Readable alias project memory uses travertine."))
+    add_memory(MemoryCreate(cube_id=explicit["id"], content="Readable alias explicit memory uses smoked oak."))
+    add_memory(MemoryCreate(cube_id=other["id"], content="Unreadable other memory uses red lacquer."))
+
+    recalled = recall(RecallRequest(query="readable alias material", top_k=10, readable_cube_ids=[project["id"], explicit["id"]]))
+    searched = search_context("readable alias material", top_k=10, readable_cube_ids=[project["id"], explicit["id"]])
+
+    recalled_text = "\n".join(item["text"] for group in recalled["groups"].values() for item in group)
+    searched_text = "\n".join(item["text"] for group in searched["groups"].values() for item in group)
+
+    assert "travertine" in recalled_text
+    assert "smoked oak" in recalled_text
+    assert "red lacquer" not in recalled_text
+    assert searched["cube_scope"]["base_cube_ids"] == [project["id"], explicit["id"]]
+    assert searched["cube_scope"]["readable_cube_ids"] == [project["id"], explicit["id"]]
+    assert "travertine" in searched_text
+    assert "smoked oak" in searched_text
+    assert "red lacquer" not in searched_text

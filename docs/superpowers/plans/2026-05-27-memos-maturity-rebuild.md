@@ -1076,3 +1076,36 @@ git add app tests docs
 git commit -m "feat: route remember writable cube ids"
 git push
 ```
+
+
+---
+
+## Task 19: Readable cube IDs API alias
+
+Goal: align read APIs with MemOS naming by accepting `readable_cube_ids` while keeping legacy `cube_ids` compatibility.
+
+- [x] RED test: `RecallRequest(readable_cube_ids=[...])` and direct `search_context(readable_cube_ids=[...])` restrict results to those cubes.
+- [x] RED test: `AssetSearchRequest(readable_cube_ids=[...])` restricts asset results and returns cube-scope metadata.
+- [x] Add `readable_cube_ids` to `SearchRequest`, `RecallRequest`, and `AssetSearchRequest`.
+- [x] Wire `search_context()` and `control.recall()` to prefer `readable_cube_ids` over legacy `cube_ids`.
+- [x] Wire `search_assets()` to prefer `readable_cube_ids` and expose `cube_scope`.
+- [x] Expose `readable_cube_ids` on MCP search/recall tools while preserving `cube_ids`.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_cubes.py -q
+python -m pytest tests\test_assets.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+Commit:
+
+```powershell
+git add app tests docs
+git commit -m "feat: accept readable cube ids"
+git push
+```

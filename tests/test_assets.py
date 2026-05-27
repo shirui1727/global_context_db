@@ -329,3 +329,24 @@ def test_writable_cube_ids_fan_out_asset_writes(asset_env):
 
     assert by_cube[project["id"]]["id"] in {item["id"] for item in project_search["results"]}
     assert by_cube[shared["id"]]["id"] in {item["id"] for item in shared_search["results"]}
+
+
+def test_asset_search_accepts_readable_cube_ids(asset_env):
+    from app.cubes.service import create_cube
+    from app.core.schemas import ContextCubeCreate
+
+    project = create_cube(ContextCubeCreate(name="Readable Asset Project", cube_type="project", owner_id="asset-readable-project"))
+    shared = create_cube(ContextCubeCreate(name="Readable Asset Shared", cube_type="shared", owner_id="asset-readable-shared", visibility="shared"))
+    other = create_cube(ContextCubeCreate(name="Unreadable Asset Other", cube_type="project", owner_id="asset-readable-other"))
+
+    project_asset = create_asset(AssetCreate(cube_id=project["id"], uri="smb://NAS/readable/project.jpg", asset_key="readable:project", checksum="sha-readable-project", summary="Readable asset project bronze screen."))
+    shared_asset = create_asset(AssetCreate(cube_id=shared["id"], uri="smb://NAS/readable/shared.jpg", asset_key="readable:shared", checksum="sha-readable-shared", summary="Readable asset shared stone wall."))
+    other_asset = create_asset(AssetCreate(cube_id=other["id"], uri="smb://NAS/readable/other.jpg", asset_key="readable:other", checksum="sha-readable-other", summary="Unreadable asset red lacquer panel."))
+
+    result = search_assets(AssetSearchRequest(query="readable asset", top_k=10, readable_cube_ids=[project["id"], shared["id"]]))
+    ids = {item["id"] for item in result["results"]}
+
+    assert project_asset["id"] in ids
+    assert shared_asset["id"] in ids
+    assert other_asset["id"] not in ids
+    assert result["cube_scope"]["base_cube_ids"] == [project["id"], shared["id"]]

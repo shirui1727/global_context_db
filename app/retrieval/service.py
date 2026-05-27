@@ -26,6 +26,7 @@ def search_context(
     top_k: int = 5,
     cube_id: str | None = None,
     cube_ids: list[str] | None = None,
+    readable_cube_ids: list[str] | None = None,
     context_domain: str | None = None,
     kind: str | None = None,
     mode: str = "context_search",
@@ -40,8 +41,9 @@ def search_context(
     elif mode == "asset_search":
         context_domain = "asset"
         kind = "asset"
-    base_cube_ids = cube_ids or ([cube_id] if cube_id else None)
-    scoped_cube_ids = compose_readable_cube_ids(cube_id=cube_id, cube_ids=cube_ids)
+    effective_cube_ids = readable_cube_ids or cube_ids
+    base_cube_ids = effective_cube_ids or ([cube_id] if cube_id else None)
+    scoped_cube_ids = compose_readable_cube_ids(cube_id=cube_id, cube_ids=effective_cube_ids)
     results = search_items(query, top_k, kind=kind, context_domain=context_domain, cube_ids=scoped_cube_ids)
     cleaned = []
     for row in results:

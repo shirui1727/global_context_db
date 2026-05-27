@@ -25,6 +25,7 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     cube_id: str | None = None
     cube_ids: list[str] = Field(default_factory=list)
+    readable_cube_ids: list[str] = Field(default_factory=list)
     context_domain: str | None = None
     kind: str | None = None
     mode: str = "context_search"
@@ -242,6 +243,7 @@ class RecallRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     cube_id: str | None = None
     cube_ids: list[str] = Field(default_factory=list)
+    readable_cube_ids: list[str] = Field(default_factory=list)
     session_id: str | None = None
     project_path: str | None = None
     mode: str = "context_search"
@@ -459,6 +461,7 @@ class AssetSearchRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=50)
     cube_id: str | None = None
     cube_ids: list[str] = Field(default_factory=list)
+    readable_cube_ids: list[str] = Field(default_factory=list)
     status: list[str] | None = None
     asset_kind: str | None = None
     trust_level: str | None = None

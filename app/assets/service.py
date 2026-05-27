@@ -828,7 +828,8 @@ def get_asset_scan_run(scan_run_id: str) -> dict:
 
 
 def search_assets(payload: AssetSearchRequest) -> dict:
-    cube_ids = payload.cube_ids or ([payload.cube_id] if payload.cube_id else None)
+    base_cube_ids = payload.readable_cube_ids or payload.cube_ids or ([payload.cube_id] if payload.cube_id else None)
+    cube_ids = base_cube_ids
     results = search_items(
         payload.query,
         max(payload.top_k * 5, payload.top_k),
@@ -853,7 +854,16 @@ def search_assets(payload: AssetSearchRequest) -> dict:
         score = _rank(row, asset)
         cleaned.append({**asset, "score": score, "locations": locations[:3]})
     cleaned.sort(key=lambda item: item["score"], reverse=True)
-    return {"query": payload.query, "mode": "asset_search", "results": cleaned[: payload.top_k]}
+    return {
+        "query": payload.query,
+        "mode": "asset_search",
+        "results": cleaned[: payload.top_k],
+        "cube_scope": {
+            "base_cube_ids": base_cube_ids or [],
+            "readable_cube_ids": cube_ids or [],
+            "include_shared": bool(base_cube_ids),
+        },
+    }
 
 
 def rebuild_asset_vectors(clean_legacy: bool = True) -> dict:

@@ -200,13 +200,14 @@ def gcd_search_memories(
     top_k: int = 5,
     cube_id: str | None = None,
     cube_ids: list[str] | None = None,
+    readable_cube_ids: list[str] | None = None,
     user_id: str | None = None,
     agent_id: str | None = None,
     memory_type: str | None = None,
 ) -> dict[str, Any]:
     """Search stored memories by semantic similarity."""
     bootstrap(settings)
-    scoped_cube_ids = cube_ids or ([cube_id] if cube_id else None)
+    scoped_cube_ids = readable_cube_ids or cube_ids or ([cube_id] if cube_id else None)
     return search_memory(query, top_k, user_id=user_id, agent_id=agent_id, memory_type=memory_type, cube_ids=scoped_cube_ids)
 
 
@@ -216,13 +217,14 @@ def memory_search(
     top_k: int = 5,
     cube_id: str | None = None,
     cube_ids: list[str] | None = None,
+    readable_cube_ids: list[str] | None = None,
     user_id: str | None = None,
     agent_id: str | None = None,
     memory_type: str | None = None,
 ) -> dict[str, Any]:
     """Compatibility alias for older clients that call memory_search."""
     bootstrap(settings)
-    scoped_cube_ids = cube_ids or ([cube_id] if cube_id else None)
+    scoped_cube_ids = readable_cube_ids or cube_ids or ([cube_id] if cube_id else None)
     return search_memory(query, top_k, user_id=user_id, agent_id=agent_id, memory_type=memory_type, cube_ids=scoped_cube_ids)
 
 
@@ -838,6 +840,7 @@ def gcd_search_assets(
     top_k: int = 5,
     cube_id: str | None = None,
     cube_ids: list[str] | None = None,
+    readable_cube_ids: list[str] | None = None,
     asset_kind: str | None = None,
     trust_level: str | None = None,
 ) -> dict[str, Any]:
@@ -849,6 +852,7 @@ def gcd_search_assets(
             top_k=top_k,
             cube_id=cube_id,
             cube_ids=cube_ids or [],
+            readable_cube_ids=readable_cube_ids or [],
             asset_kind=asset_kind,
             trust_level=trust_level,
         )
@@ -1418,6 +1422,7 @@ def gcd_recall(
     top_k: int = 5,
     cube_id: str | None = None,
     cube_ids: list[str] | None = None,
+    readable_cube_ids: list[str] | None = None,
     session_id: str | None = None,
     project_path: str | None = None,
     mode: str = "context_search",
@@ -1433,6 +1438,7 @@ def gcd_recall(
             top_k=top_k,
             cube_id=cube_id,
             cube_ids=cube_ids or [],
+            readable_cube_ids=readable_cube_ids or [],
             session_id=session_id,
             project_path=project_path,
             mode=mode,
@@ -1571,6 +1577,7 @@ def gcd_search_context(
     top_k: int = 5,
     cube_id: str | None = None,
     cube_ids: list[str] | None = None,
+    readable_cube_ids: list[str] | None = None,
     context_domain: str | None = None,
     kind: str | None = None,
     mode: str = "context_search",
@@ -1584,6 +1591,7 @@ def gcd_search_context(
         top_k,
         cube_id=cube_id,
         cube_ids=cube_ids or [],
+        readable_cube_ids=readable_cube_ids or [],
         context_domain=context_domain,
         kind=kind,
         mode=mode,

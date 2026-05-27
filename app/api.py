@@ -325,6 +325,9 @@ def documents_search(payload: SearchRequest) -> dict:
     return search_context(
         payload.query,
         payload.top_k,
+        cube_id=payload.cube_id,
+        cube_ids=payload.cube_ids,
+        readable_cube_ids=payload.readable_cube_ids,
         kind="chunk",
         mode="document_search",
         legacy_flat=True,
@@ -796,6 +799,7 @@ def search(payload: SearchRequest) -> dict:
         payload.top_k,
         cube_id=payload.cube_id,
         cube_ids=payload.cube_ids,
+        readable_cube_ids=payload.readable_cube_ids,
         context_domain=payload.context_domain,
         kind=payload.kind,
         mode=payload.mode,
