@@ -156,15 +156,27 @@ class ImprovementTaskCreate(BaseModel):
     priority: int = Field(default=50, ge=0, le=100)
     reason: str = ""
     created_by: str | None = None
+    queue_name: str = "default"
+    max_retries: int = Field(default=3, ge=0, le=20)
+    next_run_at: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ImprovementTaskUpdate(BaseModel):
     status: str | None = None
+    finished_at: str | None = None
     priority: int | None = Field(default=None, ge=0, le=100)
     reason: str | None = None
     claimed_by: str | None = None
     error_message: str | None = None
+    retry_count: int | None = Field(default=None, ge=0, le=100)
+    max_retries: int | None = Field(default=None, ge=0, le=100)
+    next_run_at: str | None = None
+    claimed_at: str | None = None
+    claimed_until: str | None = None
+    worker_id: str | None = None
+    queue_name: str | None = None
+    last_error: str | None = None
     metadata: dict[str, Any] | None = None
 
 

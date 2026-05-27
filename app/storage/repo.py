@@ -430,6 +430,14 @@ def init_sqlite(path: Path) -> None:
             updated_at text,
             finished_at text,
             error_message text,
+            retry_count integer default 0,
+            max_retries integer default 3,
+            next_run_at text,
+            claimed_at text,
+            claimed_until text,
+            worker_id text,
+            queue_name text default 'default',
+            last_error text,
             metadata text default '{}',
             unique(task_kind, target_domain, target_id)
         )
@@ -474,7 +482,21 @@ def init_sqlite(path: Path) -> None:
         },
     )
     _ensure_columns(conn, "agent_sessions", {"cube_id": "text"})
-    _ensure_columns(conn, "improvement_tasks", {"cube_id": "text"})
+    _ensure_columns(
+        conn,
+        "improvement_tasks",
+        {
+            "cube_id": "text",
+            "retry_count": "integer default 0",
+            "max_retries": "integer default 3",
+            "next_run_at": "text",
+            "claimed_at": "text",
+            "claimed_until": "text",
+            "worker_id": "text",
+            "queue_name": "text default 'default'",
+            "last_error": "text",
+        },
+    )
     _ensure_columns(conn, "memory_promotion_proposals", {"cube_id": "text"})
     _ensure_indexes(conn)
     conn.commit()
@@ -1806,14 +1828,23 @@ class SessionModelUsageRepo:
 
 
 class ImprovementTasksRepo:
+    _columns = """
+        id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
+        created_by, claimed_by, created_at, updated_at, finished_at, error_message,
+        retry_count, max_retries, next_run_at, claimed_at, claimed_until, worker_id,
+        queue_name, last_error, metadata
+    """
+
     def upsert(self, row: dict) -> dict:
         with _conn() as conn:
             conn.execute(
                 """
                 insert into improvement_tasks(
                     id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
-                    created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_by, claimed_by, created_at, updated_at, finished_at, error_message,
+                    retry_count, max_retries, next_run_at, claimed_at, claimed_until, worker_id,
+                    queue_name, last_error, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(task_kind, target_domain, target_id) do update set
                     status=case
                         when improvement_tasks.status in ('done', 'running') then improvement_tasks.status
@@ -1821,6 +1852,9 @@ class ImprovementTasksRepo:
                     end,
                     priority=min(improvement_tasks.priority, excluded.priority),
                     reason=coalesce(excluded.reason, improvement_tasks.reason),
+                    max_retries=excluded.max_retries,
+                    next_run_at=excluded.next_run_at,
+                    queue_name=excluded.queue_name,
                     updated_at=excluded.updated_at,
                     metadata=excluded.metadata
                 """,
@@ -1839,13 +1873,20 @@ class ImprovementTasksRepo:
                     row.get("updated_at"),
                     row.get("finished_at"),
                     row.get("error_message"),
+                    row.get("retry_count", 0),
+                    row.get("max_retries", 3),
+                    row.get("next_run_at"),
+                    row.get("claimed_at"),
+                    row.get("claimed_until"),
+                    row.get("worker_id"),
+                    row.get("queue_name") or "default",
+                    row.get("last_error"),
                     json.dumps(row.get("metadata") or {}, ensure_ascii=False),
                 ),
             )
             saved = conn.execute(
-                """
-                select id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
-                       created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
+                f"""
+                select {self._columns}
                 from improvement_tasks
                 where task_kind = ? and target_domain = ? and target_id = ?
                 """,
@@ -1856,9 +1897,8 @@ class ImprovementTasksRepo:
     def get(self, task_id: str) -> dict | None:
         with _conn() as conn:
             row = conn.execute(
-                """
-                select id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
-                       created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
+                f"""
+                select {self._columns}
                 from improvement_tasks
                 where id = ?
                 """,
@@ -1876,7 +1916,9 @@ class ImprovementTasksRepo:
                 """
                 update improvement_tasks
                 set status = ?, priority = ?, reason = ?, claimed_by = ?, updated_at = ?,
-                    finished_at = ?, error_message = ?, metadata = ?
+                    finished_at = ?, error_message = ?, retry_count = ?, max_retries = ?,
+                    next_run_at = ?, claimed_at = ?, claimed_until = ?, worker_id = ?,
+                    queue_name = ?, last_error = ?, metadata = ?
                 where id = ?
                 """,
                 (
@@ -1887,11 +1929,87 @@ class ImprovementTasksRepo:
                     updated.get("updated_at"),
                     updated.get("finished_at"),
                     updated.get("error_message"),
+                    updated.get("retry_count", 0),
+                    updated.get("max_retries", 3),
+                    updated.get("next_run_at"),
+                    updated.get("claimed_at"),
+                    updated.get("claimed_until"),
+                    updated.get("worker_id"),
+                    updated.get("queue_name") or "default",
+                    updated.get("last_error"),
                     json.dumps(updated.get("metadata") or {}, ensure_ascii=False),
                     task_id,
                 ),
             )
         return self.get(task_id)
+
+    def claim_next(self, queue_name: str, worker_id: str, now: str, claimed_until: str) -> dict | None:
+        with _conn() as conn:
+            conn.execute("begin immediate")
+            row = conn.execute(
+                """
+                select id
+                from improvement_tasks
+                where status = 'pending'
+                  and coalesce(queue_name, 'default') = ?
+                  and (next_run_at is null or next_run_at <= ?)
+                order by priority asc, created_at asc, rowid asc
+                limit 1
+                """,
+                (queue_name, now),
+            ).fetchone()
+            if not row:
+                conn.commit()
+                return None
+            task_id = row[0]
+            conn.execute(
+                """
+                update improvement_tasks
+                set status = 'running', claimed_by = ?, worker_id = ?, claimed_at = ?,
+                    claimed_until = ?, updated_at = ?, finished_at = null, error_message = null
+                where id = ? and status = 'pending'
+                """,
+                (worker_id, worker_id, now, claimed_until, now, task_id),
+            )
+            claimed = conn.execute(
+                f"""
+                select {self._columns}
+                from improvement_tasks
+                where id = ?
+                """,
+                (task_id,),
+            ).fetchone()
+            conn.commit()
+        return self._decode(claimed) if claimed else None
+
+    def release_expired_claims(self, now: str) -> int:
+        with _conn() as conn:
+            cursor = conn.execute(
+                """
+                update improvement_tasks
+                set status = 'pending', claimed_by = null, worker_id = null,
+                    claimed_at = null, claimed_until = null, updated_at = ?
+                where status = 'running' and claimed_until is not null and claimed_until <= ?
+                """,
+                (now, now),
+            )
+            return cursor.rowcount
+
+    def retry_failed(self, now: str) -> int:
+        with _conn() as conn:
+            cursor = conn.execute(
+                """
+                update improvement_tasks
+                set status = 'pending', claimed_by = null, worker_id = null,
+                    claimed_at = null, claimed_until = null, finished_at = null,
+                    error_message = null, updated_at = ?
+                where status = 'failed'
+                  and retry_count < max_retries
+                  and (next_run_at is null or next_run_at <= ?)
+                """,
+                (now, now),
+            )
+            return cursor.rowcount
 
     def list_recent(
         self,
@@ -1915,9 +2033,8 @@ class ImprovementTasksRepo:
         if target_id:
             where.append("target_id = ?")
             params.append(target_id)
-        query = """
-            select id, cube_id, task_kind, target_domain, target_id, status, priority, reason,
-                   created_by, claimed_by, created_at, updated_at, finished_at, error_message, metadata
+        query = f"""
+            select {self._columns}
             from improvement_tasks
         """
         if where:
@@ -1956,7 +2073,15 @@ class ImprovementTasksRepo:
             "updated_at": row[11],
             "finished_at": row[12],
             "error_message": row[13],
-            "metadata": _json_loads(row[14], {}),
+            "retry_count": row[14] or 0,
+            "max_retries": row[15] if row[15] is not None else 3,
+            "next_run_at": row[16],
+            "claimed_at": row[17],
+            "claimed_until": row[18],
+            "worker_id": row[19],
+            "queue_name": row[20] or "default",
+            "last_error": row[21],
+            "metadata": _json_loads(row[22], {}),
         }
 
 

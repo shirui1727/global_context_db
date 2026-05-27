@@ -60,6 +60,13 @@ from app.control.service import recall as control_recall
 from app.control.service import remember as control_remember
 from app.cubes.service import bind_to_cube, create_cube, get_cube, list_cube_bindings, list_cubes, update_cube
 from app.improvements.service import create_improvement_task, list_improvement_tasks, update_improvement_task
+from app.scheduler.service import (
+    claim_next_task,
+    release_expired_claims,
+    retry_failed_tasks,
+    run_pending_tasks,
+    scheduler_status,
+)
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
     add_memory,
@@ -906,6 +913,9 @@ def gcd_create_improvement_task(
     priority: int = 50,
     reason: str = "",
     created_by: str | None = None,
+    queue_name: str = "default",
+    max_retries: int = 3,
+    next_run_at: str | None = None,
     metadata: dict[str, Any] | None = None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
@@ -921,6 +931,9 @@ def gcd_create_improvement_task(
             priority=priority,
             reason=reason,
             created_by=created_by,
+            queue_name=queue_name,
+            max_retries=max_retries,
+            next_run_at=next_run_at,
             metadata=metadata or {},
         )
     )
@@ -947,6 +960,12 @@ def gcd_update_improvement_task(
     reason: str | None = None,
     claimed_by: str | None = None,
     error_message: str | None = None,
+    retry_count: int | None = None,
+    max_retries: int | None = None,
+    next_run_at: str | None = None,
+    worker_id: str | None = None,
+    queue_name: str | None = None,
+    last_error: str | None = None,
     metadata: dict[str, Any] | None = None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
@@ -961,9 +980,56 @@ def gcd_update_improvement_task(
             reason=reason,
             claimed_by=claimed_by,
             error_message=error_message,
+            retry_count=retry_count,
+            max_retries=max_retries,
+            next_run_at=next_run_at,
+            worker_id=worker_id,
+            queue_name=queue_name,
+            last_error=last_error,
             metadata=metadata,
         ),
     )
+
+
+@mcp.tool()
+def gcd_scheduler_claim_next(
+    queue_name: str = "default",
+    worker_id: str = "local",
+    lease_seconds: int = 300,
+    api_key: str | None = None,
+) -> dict[str, Any] | None:
+    """Claim the next pending scheduler task for a worker."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return claim_next_task(queue_name=queue_name, worker_id=worker_id, lease_seconds=lease_seconds)
+
+
+@mcp.tool()
+def gcd_scheduler_run_pending(
+    limit: int = 10,
+    queue_name: str = "default",
+    worker_id: str = "local",
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Claim and execute pending scheduler tasks."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return run_pending_tasks(limit=limit, queue_name=queue_name, worker_id=worker_id)
+
+
+@mcp.tool()
+def gcd_scheduler_release_expired(api_key: str | None = None) -> dict[str, int]:
+    """Release expired running tasks and retry eligible failed tasks."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return {"released": release_expired_claims(), "retried": retry_failed_tasks()}
+
+
+@mcp.tool()
+def gcd_scheduler_status() -> dict[str, Any]:
+    """Return scheduler task counts by status and kind."""
+    bootstrap(settings)
+    return scheduler_status()
 
 
 @mcp.tool()

@@ -77,6 +77,14 @@ def create_improvement_task(payload: ImprovementTaskCreate) -> dict:
             "updated_at": now,
             "finished_at": None,
             "error_message": None,
+            "retry_count": 0,
+            "max_retries": payload.max_retries,
+            "next_run_at": payload.next_run_at,
+            "claimed_at": None,
+            "claimed_until": None,
+            "worker_id": None,
+            "queue_name": payload.queue_name,
+            "last_error": None,
             "metadata": payload.metadata,
         }
     )
@@ -125,6 +133,7 @@ def run_improve(payload: ImproveRequest) -> dict:
             priority=payload.priority,
             reason=payload.reason,
             created_by=payload.created_by,
+            queue_name=payload.metadata.get("queue_name", "default"),
             metadata=payload.metadata,
         )
     )
@@ -152,6 +161,22 @@ def run_improve(payload: ImproveRequest) -> dict:
         ),
     )
     return {"task": done, "executed": True, "ok": True, "result": result}
+
+
+def execute_improvement_task(task: dict, *, actor: str = "scheduler", clean_legacy: bool = True) -> dict:
+    payload = ImproveRequest(
+        task_kind=task["task_kind"],
+        target_domain=task["target_domain"],
+        target_id=task["target_id"],
+        cube_id=task.get("cube_id"),
+        execute=True,
+        clean_legacy=clean_legacy,
+        priority=task.get("priority", 50),
+        reason=task.get("reason") or "",
+        created_by=actor,
+        metadata=task.get("metadata") or {},
+    )
+    return _execute_task(task, payload)
 
 
 def _execute_task(task: dict, payload: ImproveRequest) -> dict:

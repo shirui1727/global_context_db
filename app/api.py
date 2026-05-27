@@ -80,6 +80,13 @@ from app.control.service import recall as control_recall
 from app.control.service import remember as control_remember
 from app.cubes.service import bind_to_cube, create_cube, get_cube, list_cube_bindings, list_cubes, update_cube
 from app.improvements.service import create_improvement_task, list_improvement_tasks, update_improvement_task
+from app.scheduler.service import (
+    claim_next_task,
+    release_expired_claims,
+    retry_failed_tasks,
+    run_pending_tasks,
+    scheduler_status,
+)
 from app.ingest.pipeline import ingest_text
 from app.memory.service import (
     add_memory,
@@ -530,6 +537,32 @@ def improvements_update(task_id: str, payload: ImprovementTaskUpdate) -> dict:
         return update_improvement_task(task_id, payload)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/scheduler/claim", dependencies=[Depends(require_api_key)])
+def scheduler_claim(queue_name: str = "default", worker_id: str = "local", lease_seconds: int = 300) -> dict | None:
+    try:
+        return claim_next_task(queue_name=queue_name, worker_id=worker_id, lease_seconds=lease_seconds)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/scheduler/run-pending", dependencies=[Depends(require_api_key)])
+def scheduler_run_pending(limit: int = 10, queue_name: str = "default", worker_id: str = "local") -> dict:
+    try:
+        return run_pending_tasks(limit=limit, queue_name=queue_name, worker_id=worker_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/scheduler/release-expired", dependencies=[Depends(require_api_key)])
+def scheduler_release_expired() -> dict:
+    return {"released": release_expired_claims(), "retried": retry_failed_tasks()}
+
+
+@router.get("/scheduler/status")
+def scheduler_status_get() -> dict:
+    return scheduler_status()
 
 
 @router.post("/assets/scan-runs", dependencies=[Depends(require_api_key)])
