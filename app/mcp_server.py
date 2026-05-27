@@ -31,6 +31,7 @@ from app.core.schemas import (
     MemoryPromotionCreate,
     MemoryPromotionReview,
     MemoryUpdate,
+    ReaderItem,
     RecallRequest,
     RememberRequest,
     ResumeContextRequest,
@@ -58,6 +59,7 @@ from app.files.service import add_file_reference, list_file_references, update_f
 from app.governance.service import diagnostics
 from app.handlers.cube_handler import CubeHandler
 from app.handlers.feedback_handler import FeedbackHandler
+from app.handlers.memory_handler import MemoryHandler
 from app.handlers.scheduler_handler import SchedulerHandler
 from app.runtime.components import get_runtime_components
 from app.control.service import forget as control_forget
@@ -111,6 +113,10 @@ def _scheduler_handler() -> SchedulerHandler:
 
 def _feedback_handler() -> FeedbackHandler:
     return FeedbackHandler(get_runtime_components(settings))
+
+
+def _memory_handler() -> MemoryHandler:
+    return MemoryHandler(get_runtime_components(settings))
 
 
 def configure_http_transport() -> None:
@@ -227,6 +233,76 @@ def gcd_list_memory_versions(memory_id: str, limit: int = 20) -> list[dict[str, 
     """List version history for a memory."""
     bootstrap(settings)
     return list_memory_versions(memory_id, limit)
+
+
+@mcp.tool()
+def gcd_list_memory_lifecycle_events(memory_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    """List lifecycle transitions for a memory."""
+    bootstrap(settings)
+    return _memory_handler().list_lifecycle_events(memory_id, limit)
+
+
+@mcp.tool()
+def gcd_create_memory_candidate(
+    source_domain: str,
+    source_id: str,
+    content: str,
+    cube_id: str | None = None,
+    content_kind: str = "note",
+    tags: list[str] | None = None,
+    confidence: float = 1.0,
+    provenance: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+    created_by: str | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Store a Reader-style memory candidate for review before promotion."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return _memory_handler().create_candidate(
+        ReaderItem(
+            source_domain=source_domain,
+            source_id=source_id,
+            cube_id=cube_id,
+            content=content,
+            content_kind=content_kind,
+            tags=tags or [],
+            confidence=confidence,
+            provenance=provenance or {"source_domain": source_domain, "source_id": source_id},
+            metadata=metadata or {},
+        ),
+        created_by=created_by,
+    )
+
+
+@mcp.tool()
+def gcd_list_memory_candidates(
+    limit: int = 100,
+    status: str | None = None,
+    source_domain: str | None = None,
+) -> list[dict[str, Any]]:
+    """List pending or reviewed memory candidates."""
+    bootstrap(settings)
+    return _memory_handler().list_candidates(limit=limit, status=status, source_domain=source_domain)
+
+
+@mcp.tool()
+def gcd_promote_memory_candidate(
+    candidate_id: str,
+    reviewed_by: str | None = None,
+    trust_level: str = "verified",
+    status_on_memory: str = "active",
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Promote a reviewed memory candidate into a durable memory."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return _memory_handler().promote_candidate(
+        candidate_id,
+        reviewed_by=reviewed_by,
+        trust_level=trust_level,
+        status_on_memory=status_on_memory,
+    )
 
 
 @mcp.tool()

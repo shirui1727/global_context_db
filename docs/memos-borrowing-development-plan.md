@@ -50,7 +50,8 @@ MemOS 把输入先读成统一 memory item，再进入存储/检索/治理。这
 
 下一步：
 
-- reader output 进入 `memory_candidates`。
+- reader output 进入 `memory_candidates`。（已完成）
+- 通过 REST/MCP 暴露 candidate 创建、列表、promotion 和 lifecycle 查询。（已完成）
 - 增加 evidence/provenance/span 字段规范。
 - fine mode 后置：LLM 抽取、幻觉过滤、evidence quote。
 
@@ -153,6 +154,14 @@ MemOS 的 textual metadata 里有 source、status、version、history、archived
 ```text
 memory_lifecycle_events
 memory_candidates
+GET  /memories/{memory_id}/lifecycle
+POST /memory-candidates
+GET  /memory-candidates
+POST /memory-candidates/{candidate_id}/promote
+gcd_list_memory_lifecycle_events
+gcd_create_memory_candidate
+gcd_list_memory_candidates
+gcd_promote_memory_candidate
 ```
 
 状态建议：
@@ -202,21 +211,19 @@ conflicted
 
 1. Context Cube v0.1。
 2. Reader fast mode v0.1。
-
-### 当前立即执行
-
 3. SQLite Scheduler。
 4. Memory Feedback 基础表和手动 apply。
 5. Runtime Components + Handlers。
 6. Lifecycle events + reader candidates。
+7. Lifecycle/candidate REST + MCP 调用面。
 
 ### 再下一轮
 
-7. Reader fine mode。
-8. LLM feedback action proposal。
-9. Redis scheduler。
-10. Hook/plugin runtime。
-11. dashboard / graph memory。
+8. Reader fine mode。
+9. LLM feedback action proposal。
+10. Redis scheduler。
+11. Hook/plugin runtime。
+12. dashboard / graph memory。
 
 ---
 

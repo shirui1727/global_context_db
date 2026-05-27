@@ -546,7 +546,74 @@ git push
 
 ---
 
-## 7. 每阶段验收门槛
+## Task 7: Lifecycle/candidate REST + MCP 调用面
+
+**Files:**
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\handlers\memory_handler.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\api.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\mcp_server.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_memory_surfaces.py`
+
+- [x] **Step 1: TDD 覆盖 REST 调用面**
+
+新增测试：创建 memory 后 `GET /memories/{memory_id}/lifecycle` 能返回 `created`；`POST /memory-candidates` 能从 `ReaderItem` 保存候选；`GET /memory-candidates` 能列出；`POST /memory-candidates/{candidate_id}/promote` 能 promote 成正式 memory。
+
+- [x] **Step 2: TDD 覆盖 MCP 调用面**
+
+新增测试直接调用：
+
+```text
+gcd_list_memory_lifecycle_events
+gcd_create_memory_candidate
+gcd_list_memory_candidates
+gcd_promote_memory_candidate
+```
+
+- [x] **Step 3: MemoryHandler 薄封装**
+
+`MemoryHandler` 只代理 service：
+
+```text
+list_lifecycle_events
+create_candidate
+list_candidates
+promote_candidate
+```
+
+- [x] **Step 4: REST/MCP 接入**
+
+新增 REST：
+
+```text
+GET  /memories/{memory_id}/lifecycle
+POST /memory-candidates
+GET  /memory-candidates
+POST /memory-candidates/{candidate_id}/promote
+```
+
+新增 MCP：
+
+```text
+gcd_list_memory_lifecycle_events
+gcd_create_memory_candidate
+gcd_list_memory_candidates
+gcd_promote_memory_candidate
+```
+
+- [x] **Step 5: 验证提交**
+
+```powershell
+python -m pytest tests\test_memory_surfaces.py -q
+python -m pytest -q
+python -m compileall app tools
+git add app tests docs
+git commit -m "feat: expose memory lifecycle surfaces"
+git push
+```
+
+---
+
+## 8. 每阶段验收门槛
 
 每个阶段完成前必须跑：
 
@@ -565,7 +632,7 @@ git diff --check
 
 ---
 
-## 8. 后续阶段触发条件
+## 9. 后续阶段触发条件
 
 - Scheduler SQLite 连续通过本地和 NAS 运行验证后，再做 Redis Streams。
 - Feedback 手动 apply 被实际使用后，再加 LLM action proposal。

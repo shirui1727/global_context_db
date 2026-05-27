@@ -41,6 +41,7 @@ from app.core.schemas import (
     MemoryPromotionReview,
     MemoryPromotionUpdate,
     MemoryUpdate,
+    ReaderItem,
     RecallRequest,
     RememberRequest,
     ResumeContextRequest,
@@ -78,6 +79,7 @@ from app.files.service import add_file_reference, list_file_references, update_f
 from app.governance.service import diagnostics
 from app.handlers.cube_handler import CubeHandler
 from app.handlers.feedback_handler import FeedbackHandler
+from app.handlers.memory_handler import MemoryHandler
 from app.handlers.scheduler_handler import SchedulerHandler
 from app.runtime.components import get_runtime_components
 from app.control.service import forget as control_forget
@@ -132,6 +134,10 @@ def _scheduler_handler() -> SchedulerHandler:
 
 def _feedback_handler() -> FeedbackHandler:
     return FeedbackHandler(get_runtime_components(settings))
+
+
+def _memory_handler() -> MemoryHandler:
+    return MemoryHandler(get_runtime_components(settings))
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -889,6 +895,38 @@ def memories_quality_enqueue(limit: int = 100, created_by: str | None = None) ->
     return enqueue_memory_quality_improvements(limit=limit, created_by=created_by)
 
 
+@router.post("/memory-candidates", dependencies=[Depends(require_api_key)])
+def memory_candidates_create(payload: ReaderItem, created_by: str | None = None) -> dict:
+    return _memory_handler().create_candidate(payload, created_by=created_by)
+
+
+@router.get("/memory-candidates")
+def memory_candidates_list(
+    limit: int = 100,
+    status: str | None = None,
+    source_domain: str | None = None,
+) -> list[dict]:
+    return _memory_handler().list_candidates(limit=limit, status=status, source_domain=source_domain)
+
+
+@router.post("/memory-candidates/{candidate_id}/promote", dependencies=[Depends(require_api_key)])
+def memory_candidates_promote(
+    candidate_id: str,
+    reviewed_by: str | None = None,
+    trust_level: str = "verified",
+    status_on_memory: str = "active",
+) -> dict:
+    try:
+        return _memory_handler().promote_candidate(
+            candidate_id,
+            reviewed_by=reviewed_by,
+            trust_level=trust_level,
+            status_on_memory=status_on_memory,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @router.patch("/memories/{memory_id}", dependencies=[Depends(require_api_key)])
 def memories_update(memory_id: str, payload: MemoryUpdate) -> dict:
     try:
@@ -905,6 +943,11 @@ def memories_delete(memory_id: str) -> dict:
 @router.get("/memories/{memory_id}/versions")
 def memories_versions(memory_id: str, limit: int = 20) -> list[dict]:
     return list_memory_versions(memory_id, limit)
+
+
+@router.get("/memories/{memory_id}/lifecycle")
+def memories_lifecycle(memory_id: str, limit: int = 50) -> list[dict]:
+    return _memory_handler().list_lifecycle_events(memory_id, limit)
 
 
 @router.post("/memories/{memory_id}/evidence", dependencies=[Depends(require_api_key)])
