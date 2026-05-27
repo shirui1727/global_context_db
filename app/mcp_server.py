@@ -56,27 +56,16 @@ from app.assets.service import (
 )
 from app.files.service import add_file_reference, list_file_references, update_file_reference
 from app.governance.service import diagnostics
+from app.handlers.cube_handler import CubeHandler
+from app.handlers.feedback_handler import FeedbackHandler
+from app.handlers.scheduler_handler import SchedulerHandler
+from app.runtime.components import get_runtime_components
 from app.control.service import forget as control_forget
 from app.control.service import improve as control_improve
 from app.control.service import recall as control_recall
 from app.control.service import remember as control_remember
-from app.cubes.service import bind_to_cube, create_cube, get_cube, list_cube_bindings, list_cubes, update_cube
 from app.improvements.service import create_improvement_task, list_improvement_tasks, update_improvement_task
-from app.scheduler.service import (
-    claim_next_task,
-    release_expired_claims,
-    retry_failed_tasks,
-    run_pending_tasks,
-    scheduler_status,
-)
 from app.ingest.pipeline import ingest_text
-from app.memory.feedback_service import (
-    add_memory_feedback_action,
-    apply_memory_feedback,
-    create_memory_feedback,
-    list_memory_feedback,
-    list_memory_feedback_actions,
-)
 from app.memory.service import (
     add_memory,
     add_memory_evidence,
@@ -110,6 +99,18 @@ mcp = FastMCP(
         "Use it to store durable memories, recall relevant context, and ingest text documents."
     ),
 )
+
+
+def _cube_handler() -> CubeHandler:
+    return CubeHandler(get_runtime_components(settings))
+
+
+def _scheduler_handler() -> SchedulerHandler:
+    return SchedulerHandler(get_runtime_components(settings))
+
+
+def _feedback_handler() -> FeedbackHandler:
+    return FeedbackHandler(get_runtime_components(settings))
 
 
 def configure_http_transport() -> None:
@@ -272,7 +273,7 @@ def gcd_memory_feedback(
     """Create a memory feedback record for manual review and apply."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return create_memory_feedback(
+    return _feedback_handler().create_feedback(
         MemoryFeedbackCreate(
             cube_id=cube_id,
             feedback_text=feedback_text,
@@ -291,7 +292,7 @@ def gcd_list_memory_feedback(
 ) -> list[dict[str, Any]]:
     """List memory feedback records."""
     bootstrap(settings)
-    return list_memory_feedback(limit=limit, status=status, target_memory_id=target_memory_id)
+    return _feedback_handler().list_feedback(limit=limit, status=status, target_memory_id=target_memory_id)
 
 
 @mcp.tool()
@@ -306,7 +307,7 @@ def gcd_add_memory_feedback_action(
     """Add a manual action to a memory feedback record."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return add_memory_feedback_action(
+    return _feedback_handler().add_action(
         feedback_id,
         MemoryFeedbackActionCreate(
             action_type=action_type,
@@ -321,7 +322,7 @@ def gcd_add_memory_feedback_action(
 def gcd_list_memory_feedback_actions(feedback_id: str, limit: int = 100) -> list[dict[str, Any]]:
     """List manual actions attached to a memory feedback record."""
     bootstrap(settings)
-    return list_memory_feedback_actions(feedback_id, limit=limit)
+    return _feedback_handler().list_actions(feedback_id, limit=limit)
 
 
 @mcp.tool()
@@ -333,7 +334,7 @@ def gcd_apply_memory_feedback(
     """Apply pending manual actions for a memory feedback record."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return apply_memory_feedback(feedback_id, actor=actor)
+    return _feedback_handler().apply(feedback_id, actor=actor)
 
 
 @mcp.tool()
@@ -415,7 +416,7 @@ def gcd_create_cube(
     """Create a Context Cube memory space for project/user/agent/shared isolation."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return create_cube(
+    return _cube_handler().create_cube(
         ContextCubeCreate(
             name=name,
             cube_type=cube_type,
@@ -437,14 +438,14 @@ def gcd_list_cubes(
 ) -> list[dict[str, Any]]:
     """List Context Cubes."""
     bootstrap(settings)
-    return list_cubes(limit=limit, cube_type=cube_type, owner_id=owner_id, status=status)
+    return _cube_handler().list_cubes(limit=limit, cube_type=cube_type, owner_id=owner_id, status=status)
 
 
 @mcp.tool()
 def gcd_get_cube(cube_id: str) -> dict[str, Any]:
     """Get one Context Cube by id."""
     bootstrap(settings)
-    return get_cube(cube_id)
+    return _cube_handler().get_cube(cube_id)
 
 
 @mcp.tool()
@@ -461,7 +462,7 @@ def gcd_update_cube(
     """Update Context Cube metadata or lifecycle status."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return update_cube(
+    return _cube_handler().update_cube(
         cube_id,
         ContextCubeUpdate(
             name=name,
@@ -486,7 +487,7 @@ def gcd_bind_to_cube(
     """Bind a memory/document/asset/session/improvement object to a Context Cube."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return bind_to_cube(
+    return _cube_handler().bind_to_cube(
         cube_id,
         ContextCubeBindingCreate(
             target_domain=target_domain,
@@ -501,7 +502,7 @@ def gcd_bind_to_cube(
 def gcd_list_cube_bindings(cube_id: str, limit: int = 100) -> list[dict[str, Any]]:
     """List objects bound to a Context Cube."""
     bootstrap(settings)
-    return list_cube_bindings(cube_id, limit)
+    return _cube_handler().list_bindings(cube_id, limit)
 
 
 @mcp.tool()
@@ -1086,7 +1087,7 @@ def gcd_scheduler_claim_next(
     """Claim the next pending scheduler task for a worker."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return claim_next_task(queue_name=queue_name, worker_id=worker_id, lease_seconds=lease_seconds)
+    return _scheduler_handler().claim_next(queue_name=queue_name, worker_id=worker_id, lease_seconds=lease_seconds)
 
 
 @mcp.tool()
@@ -1099,7 +1100,7 @@ def gcd_scheduler_run_pending(
     """Claim and execute pending scheduler tasks."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return run_pending_tasks(limit=limit, queue_name=queue_name, worker_id=worker_id)
+    return _scheduler_handler().run_pending(limit=limit, queue_name=queue_name, worker_id=worker_id)
 
 
 @mcp.tool()
@@ -1107,14 +1108,14 @@ def gcd_scheduler_release_expired(api_key: str | None = None) -> dict[str, int]:
     """Release expired running tasks and retry eligible failed tasks."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
-    return {"released": release_expired_claims(), "retried": retry_failed_tasks()}
+    return _scheduler_handler().release_expired()
 
 
 @mcp.tool()
 def gcd_scheduler_status() -> dict[str, Any]:
     """Return scheduler task counts by status and kind."""
     bootstrap(settings)
-    return scheduler_status()
+    return _scheduler_handler().status()
 
 
 @mcp.tool()

@@ -76,27 +76,16 @@ from app.assets.service import (
 )
 from app.files.service import add_file_reference, list_file_references, update_file_reference
 from app.governance.service import diagnostics
+from app.handlers.cube_handler import CubeHandler
+from app.handlers.feedback_handler import FeedbackHandler
+from app.handlers.scheduler_handler import SchedulerHandler
+from app.runtime.components import get_runtime_components
 from app.control.service import forget as control_forget
 from app.control.service import improve as control_improve
 from app.control.service import recall as control_recall
 from app.control.service import remember as control_remember
-from app.cubes.service import bind_to_cube, create_cube, get_cube, list_cube_bindings, list_cubes, update_cube
 from app.improvements.service import create_improvement_task, list_improvement_tasks, update_improvement_task
-from app.scheduler.service import (
-    claim_next_task,
-    release_expired_claims,
-    retry_failed_tasks,
-    run_pending_tasks,
-    scheduler_status,
-)
 from app.ingest.pipeline import ingest_text
-from app.memory.feedback_service import (
-    add_memory_feedback_action,
-    apply_memory_feedback,
-    create_memory_feedback,
-    list_memory_feedback,
-    list_memory_feedback_actions,
-)
 from app.memory.service import (
     add_memory,
     add_memory_evidence,
@@ -131,6 +120,18 @@ from app.sessions.service import (
 from app.storage.repo import documents_repo
 
 router = APIRouter()
+
+
+def _cube_handler() -> CubeHandler:
+    return CubeHandler(get_runtime_components(settings))
+
+
+def _scheduler_handler() -> SchedulerHandler:
+    return SchedulerHandler(get_runtime_components(settings))
+
+
+def _feedback_handler() -> FeedbackHandler:
+    return FeedbackHandler(get_runtime_components(settings))
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -551,7 +552,7 @@ def improvements_update(task_id: str, payload: ImprovementTaskUpdate) -> dict:
 @router.post("/scheduler/claim", dependencies=[Depends(require_api_key)])
 def scheduler_claim(queue_name: str = "default", worker_id: str = "local", lease_seconds: int = 300) -> dict | None:
     try:
-        return claim_next_task(queue_name=queue_name, worker_id=worker_id, lease_seconds=lease_seconds)
+        return _scheduler_handler().claim_next(queue_name=queue_name, worker_id=worker_id, lease_seconds=lease_seconds)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -559,19 +560,19 @@ def scheduler_claim(queue_name: str = "default", worker_id: str = "local", lease
 @router.post("/scheduler/run-pending", dependencies=[Depends(require_api_key)])
 def scheduler_run_pending(limit: int = 10, queue_name: str = "default", worker_id: str = "local") -> dict:
     try:
-        return run_pending_tasks(limit=limit, queue_name=queue_name, worker_id=worker_id)
+        return _scheduler_handler().run_pending(limit=limit, queue_name=queue_name, worker_id=worker_id)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/scheduler/release-expired", dependencies=[Depends(require_api_key)])
 def scheduler_release_expired() -> dict:
-    return {"released": release_expired_claims(), "retried": retry_failed_tasks()}
+    return _scheduler_handler().release_expired()
 
 
 @router.get("/scheduler/status")
 def scheduler_status_get() -> dict:
-    return scheduler_status()
+    return _scheduler_handler().status()
 
 
 @router.post("/assets/scan-runs", dependencies=[Depends(require_api_key)])
@@ -732,7 +733,7 @@ def search(payload: SearchRequest) -> dict:
 @router.post("/cubes", dependencies=[Depends(require_api_key)])
 def cubes_create(payload: ContextCubeCreate) -> dict:
     try:
-        return create_cube(payload)
+        return _cube_handler().create_cube(payload)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -744,13 +745,13 @@ def cubes_list(
     owner_id: str | None = None,
     status: str | None = None,
 ) -> list[dict]:
-    return list_cubes(limit=limit, cube_type=cube_type, owner_id=owner_id, status=status)
+    return _cube_handler().list_cubes(limit=limit, cube_type=cube_type, owner_id=owner_id, status=status)
 
 
 @router.get("/cubes/{cube_id}")
 def cubes_get(cube_id: str) -> dict:
     try:
-        return get_cube(cube_id)
+        return _cube_handler().get_cube(cube_id)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -758,7 +759,7 @@ def cubes_get(cube_id: str) -> dict:
 @router.patch("/cubes/{cube_id}", dependencies=[Depends(require_api_key)])
 def cubes_update(cube_id: str, payload: ContextCubeUpdate) -> dict:
     try:
-        return update_cube(cube_id, payload)
+        return _cube_handler().update_cube(cube_id, payload)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -766,7 +767,7 @@ def cubes_update(cube_id: str, payload: ContextCubeUpdate) -> dict:
 @router.post("/cubes/{cube_id}/bindings", dependencies=[Depends(require_api_key)])
 def cubes_bindings_create(cube_id: str, payload: ContextCubeBindingCreate) -> dict:
     try:
-        return bind_to_cube(cube_id, payload)
+        return _cube_handler().bind_to_cube(cube_id, payload)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -774,7 +775,7 @@ def cubes_bindings_create(cube_id: str, payload: ContextCubeBindingCreate) -> di
 @router.get("/cubes/{cube_id}/bindings")
 def cubes_bindings_list(cube_id: str, limit: int = 100) -> list[dict]:
     try:
-        return list_cube_bindings(cube_id, limit)
+        return _cube_handler().list_bindings(cube_id, limit)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -791,7 +792,7 @@ def memories(payload: MemoryCreate) -> dict:
 
 @router.post("/memory-feedback", dependencies=[Depends(require_api_key)])
 def memory_feedback_create(payload: MemoryFeedbackCreate) -> dict:
-    return create_memory_feedback(payload)
+    return _feedback_handler().create_feedback(payload)
 
 
 @router.get("/memory-feedback")
@@ -800,13 +801,13 @@ def memory_feedback_list(
     status: str | None = None,
     target_memory_id: str | None = None,
 ) -> list[dict]:
-    return list_memory_feedback(limit=limit, status=status, target_memory_id=target_memory_id)
+    return _feedback_handler().list_feedback(limit=limit, status=status, target_memory_id=target_memory_id)
 
 
 @router.post("/memory-feedback/{feedback_id}/actions", dependencies=[Depends(require_api_key)])
 def memory_feedback_actions_create(feedback_id: str, payload: MemoryFeedbackActionCreate) -> dict:
     try:
-        return add_memory_feedback_action(feedback_id, payload)
+        return _feedback_handler().add_action(feedback_id, payload)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -814,7 +815,7 @@ def memory_feedback_actions_create(feedback_id: str, payload: MemoryFeedbackActi
 @router.get("/memory-feedback/{feedback_id}/actions")
 def memory_feedback_actions_list(feedback_id: str, limit: int = 100) -> list[dict]:
     try:
-        return list_memory_feedback_actions(feedback_id, limit=limit)
+        return _feedback_handler().list_actions(feedback_id, limit=limit)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -822,7 +823,7 @@ def memory_feedback_actions_list(feedback_id: str, limit: int = 100) -> list[dic
 @router.post("/memory-feedback/{feedback_id}/apply", dependencies=[Depends(require_api_key)])
 def memory_feedback_apply(feedback_id: str, actor: str = "memory_feedback") -> dict:
     try:
-        return apply_memory_feedback(feedback_id, actor=actor)
+        return _feedback_handler().apply(feedback_id, actor=actor)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
