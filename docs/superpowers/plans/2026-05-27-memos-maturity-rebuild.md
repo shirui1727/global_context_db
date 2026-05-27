@@ -925,3 +925,32 @@ git add app tests docs
 git commit -m "feat: add default cube resolver"
 git push
 ```
+
+---
+
+## Task 14: Readable cube composition
+
+Goal: make recall/search use a mature multi-cube read scope: private/project cube plus shared/kb/public cubes, without leaking other private project cubes.
+
+- [x] RED test: recall with a project cube returns project memory plus shared/kb memories, but excludes another private project cube.
+- [x] Add `compose_readable_cube_ids()`.
+- [x] Wire composed readable cube ids into `search_context()` and expose `cube_scope` metadata.
+- [x] Preserve write behavior: writes still go to explicit/default private cube.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_cubes.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+Commit:
+
+```powershell
+git add app tests docs
+git commit -m "feat: compose readable cube scopes"
+git push
+```

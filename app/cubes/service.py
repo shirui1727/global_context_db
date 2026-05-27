@@ -172,6 +172,36 @@ def update_cube(cube_id: str, payload: ContextCubeUpdate) -> dict:
     )
 
 
+def compose_readable_cube_ids(
+    *,
+    cube_id: str | None = None,
+    cube_ids: list[str] | None = None,
+    include_shared: bool = True,
+) -> list[str] | None:
+    base = _unique_cube_ids([*(cube_ids or []), *([cube_id] if cube_id else [])])
+    if not base:
+        return None
+    if not include_shared:
+        return base
+    shared = [
+        cube["id"]
+        for cube in list_cubes(limit=1000, status="active")
+        if cube.get("cube_type") in {"shared", "kb"}
+        or cube.get("visibility") in {"shared", "public"}
+    ]
+    return _unique_cube_ids([*base, *shared])
+
+
+def _unique_cube_ids(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
 def bind_to_cube(cube_id: str, payload: ContextCubeBindingCreate) -> dict:
     get_cube(cube_id)
     target_domain = _validate(payload.target_domain, TARGET_DOMAINS, "target_domain")

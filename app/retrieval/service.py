@@ -1,3 +1,4 @@
+from app.cubes.service import compose_readable_cube_ids
 from app.retrieval.embedding import embed_text
 from app.storage.vector_store import search_items
 import json
@@ -39,7 +40,8 @@ def search_context(
     elif mode == "asset_search":
         context_domain = "asset"
         kind = "asset"
-    scoped_cube_ids = cube_ids or ([cube_id] if cube_id else None)
+    base_cube_ids = cube_ids or ([cube_id] if cube_id else None)
+    scoped_cube_ids = compose_readable_cube_ids(cube_id=cube_id, cube_ids=cube_ids)
     results = search_items(query, top_k, kind=kind, context_domain=context_domain, cube_ids=scoped_cube_ids)
     cleaned = []
     for row in results:
@@ -73,6 +75,11 @@ def search_context(
             "context_domain": context_domain,
             "kind": kind,
             "results": budgeted,
+            "cube_scope": {
+                "base_cube_ids": base_cube_ids or [],
+                "readable_cube_ids": scoped_cube_ids or [],
+                "include_shared": bool(base_cube_ids),
+            },
             "budget": _budget_metadata(budgeted, context_budget_chars, original_used_chars=budget["original_used_chars"]),
         }
     groups = {"memory": [], "document": [], "asset": [], "session": []}
@@ -91,6 +98,11 @@ def search_context(
         "query": query,
         "mode": mode,
         "groups": groups,
+        "cube_scope": {
+            "base_cube_ids": base_cube_ids or [],
+            "readable_cube_ids": scoped_cube_ids or [],
+            "include_shared": bool(base_cube_ids),
+        },
         "budget": _budget_metadata(budgeted, context_budget_chars, original_used_chars=budget["original_used_chars"]),
     }
 

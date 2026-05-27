@@ -179,3 +179,26 @@ def test_default_cube_resolver_assigns_session_project_and_agent_scopes(cube_env
     assert agent_memory["cube_id"] != session["cube_id"]
     assert any(cube["id"] == session["cube_id"] and cube["cube_type"] == "project" for cube in cubes)
     assert any(cube["id"] == agent_memory["cube_id"] and cube["cube_type"] == "agent" for cube in cubes)
+
+
+def test_recall_with_project_cube_includes_shared_and_kb_cubes(cube_env):
+    project = create_cube(ContextCubeCreate(name="Project Scoped", cube_type="project", owner_id="project:scoped"))
+    other = create_cube(ContextCubeCreate(name="Other Project", cube_type="project", owner_id="project:other"))
+    shared = create_cube(ContextCubeCreate(name="Shared Rendering", cube_type="shared", owner_id="team", visibility="shared"))
+    kb = create_cube(ContextCubeCreate(name="KB Materials", cube_type="kb", owner_id="kb:materials", visibility="shared"))
+
+    add_memory(MemoryCreate(cube_id=project["id"], content="Scoped project lobby uses bronze mesh panels."))
+    add_memory(MemoryCreate(cube_id=other["id"], content="Other project private rule uses red terrazzo."))
+    add_memory(MemoryCreate(cube_id=shared["id"], content="Shared rendering rule uses soft contact shadows."))
+    add_memory(MemoryCreate(cube_id=kb["id"], content="Knowledge base material note recommends low-iron glass."))
+
+    result = recall(RecallRequest(query="rendering material project rule", top_k=10, cube_id=project["id"]))
+    text = "\n".join(item["text"] for group in result["groups"].values() for item in group)
+
+    assert "bronze mesh" in text
+    assert "soft contact shadows" in text
+    assert "low-iron glass" in text
+    assert "red terrazzo" not in text
+    assert result["cube_scope"]["base_cube_ids"] == [project["id"]]
+    assert shared["id"] in result["cube_scope"]["readable_cube_ids"]
+    assert kb["id"] in result["cube_scope"]["readable_cube_ids"]
