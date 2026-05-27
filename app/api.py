@@ -25,6 +25,7 @@ from app.core.schemas import (
     AssetSearchRequest,
     AssetUpdate,
     CrawlJobCreateRequest,
+    FineReaderRequest,
     FileReferenceCreate,
     FileReferenceUpdate,
     FeedCreateRequest,
@@ -898,6 +899,11 @@ def memories_quality_enqueue(limit: int = 100, created_by: str | None = None) ->
 @router.post("/memory-candidates", dependencies=[Depends(require_api_key)])
 def memory_candidates_create(payload: ReaderItem, created_by: str | None = None) -> dict:
     return _memory_handler().create_candidate(payload, created_by=created_by)
+
+
+@router.post("/memory-candidates/from-fine-reader", dependencies=[Depends(require_api_key)])
+def memory_candidates_from_fine_reader(payload: FineReaderRequest) -> dict:
+    return _memory_handler().create_candidates_from_fine_reader(payload)
 
 
 @router.get("/memory-candidates")

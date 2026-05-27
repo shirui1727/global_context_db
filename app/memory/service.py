@@ -5,6 +5,7 @@ import json
 from itertools import combinations
 
 from app.core.schemas import (
+    FineReaderRequest,
     ImprovementTaskCreate,
     MemoryCreate,
     MemoryEvidenceCreate,
@@ -15,7 +16,7 @@ from app.core.schemas import (
     ReaderItem,
 )
 from app.improvements.service import create_improvement_task
-from app.reader.service import read_text_fast, reader_item_to_memory_candidate
+from app.reader.service import read_text_fast, read_text_fine, reader_item_to_memory_candidate
 from app.retrieval.embedding import embed_text
 from app.storage.repo import (
     audit_logs_repo,
@@ -218,6 +219,74 @@ def create_memory_candidate_from_reader(
     row = reader_item_to_memory_candidate(item, status=status, created_by=created_by, metadata=metadata)
     row.update({"created_at": now, "updated_at": now})
     return memory_candidates_repo().upsert(row)
+
+
+def create_memory_candidates_from_fine_reader(
+    *,
+    source: str,
+    text: str,
+    cube_id: str | None = None,
+    tags: list[str] | None = None,
+    created_by: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    reader_item = read_text_fine(source=source, text=text, cube_id=cube_id, tags=tags, metadata=metadata)
+    candidates = []
+    fine_candidates = reader_item.metadata.get("fine_candidates", [])
+    for fine_candidate in fine_candidates:
+        evidence_index = fine_candidate.get("evidence_index")
+        selected_evidence = reader_item.evidence[evidence_index] if isinstance(evidence_index, int) and 0 <= evidence_index < len(reader_item.evidence) else None
+        item = ReaderItem(
+            source_domain=reader_item.source_domain,
+            source_id=f"{reader_item.source_id}:{evidence_index}",
+            cube_id=reader_item.cube_id,
+            content=fine_candidate["content"],
+            content_kind=f"fine_{fine_candidate['memory_type']}",
+            tags=_unique_tags(reader_item.tags, fine_candidate.get("tags", [])),
+            confidence=fine_candidate.get("confidence", reader_item.confidence),
+            provenance={
+                **reader_item.provenance,
+                "reader_mode": "fine",
+                "parent_source_id": reader_item.source_id,
+                "fine_memory_type": fine_candidate["memory_type"],
+            },
+            evidence=[selected_evidence] if selected_evidence is not None else [],
+            metadata={
+                **(metadata or {}),
+                "fine": fine_candidate,
+                "reader": {
+                    **(reader_item.metadata.get("reader") if isinstance(reader_item.metadata.get("reader"), dict) else {}),
+                    "parent_source_id": reader_item.source_id,
+                    "memory_type": fine_candidate["memory_type"],
+                },
+            },
+        )
+        candidates.append(create_memory_candidate_from_reader(item, created_by=created_by, metadata={"fine": fine_candidate}))
+    reader_payload = reader_item.model_dump()
+    return {"created_count": len(candidates), "reader_item": reader_payload, "reader_item_obj": reader_item, "candidates": candidates}
+
+
+def create_memory_candidates_from_fine_request(payload: FineReaderRequest) -> dict:
+    return create_memory_candidates_from_fine_reader(
+        source=payload.source,
+        text=payload.text,
+        cube_id=payload.cube_id,
+        tags=payload.tags,
+        created_by=payload.created_by,
+        metadata=payload.metadata,
+    )
+
+
+def _unique_tags(*groups: list[str] | tuple[str, ...] | None) -> list[str]:
+    seen: set[str] = set()
+    tags: list[str] = []
+    for group in groups:
+        for value in group or []:
+            tag = str(value).strip()
+            if tag and tag not in seen:
+                seen.add(tag)
+                tags.append(tag)
+    return tags
 
 
 def list_memory_candidates(

@@ -1,7 +1,7 @@
 
 from dataclasses import dataclass
 
-from app.core.schemas import MemoryCreate, MemoryEvidenceCreate, MemoryUpdate, ReaderItem
+from app.core.schemas import FineReaderRequest, MemoryCreate, MemoryEvidenceCreate, MemoryUpdate, ReaderItem
 from app.memory import service as memory_service
 from app.runtime.components import RuntimeComponents
 
@@ -30,6 +30,9 @@ class MemoryHandler:
 
     def create_candidate(self, payload: ReaderItem, created_by: str | None = None) -> dict:
         return memory_service.create_memory_candidate_from_reader(payload, created_by=created_by)
+
+    def create_candidates_from_fine_reader(self, payload: FineReaderRequest) -> dict:
+        return memory_service.create_memory_candidates_from_fine_request(payload)
 
     def list_candidates(self, limit: int = 100, status: str | None = None, source_domain: str | None = None) -> list[dict]:
         return memory_service.list_memory_candidates(limit=limit, status=status, source_domain=source_domain)

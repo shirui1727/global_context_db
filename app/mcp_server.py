@@ -20,6 +20,7 @@ from app.core.schemas import (
     FileReferenceCreate,
     FileReferenceUpdate,
     ForgetRequest,
+    FineReaderRequest,
     ImprovementTaskCreate,
     ImprovementTaskUpdate,
     ImproveRequest,
@@ -272,6 +273,31 @@ def gcd_create_memory_candidate(
             metadata=metadata or {},
         ),
         created_by=created_by,
+    )
+
+
+@mcp.tool()
+def gcd_create_memory_candidates_from_fine_reader(
+    source: str,
+    text: str,
+    cube_id: str | None = None,
+    tags: list[str] | None = None,
+    created_by: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Run deterministic fine reader extraction and store candidates for review."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return _memory_handler().create_candidates_from_fine_reader(
+        FineReaderRequest(
+            source=source,
+            text=text,
+            cube_id=cube_id,
+            tags=tags or [],
+            created_by=created_by,
+            metadata=metadata or {},
+        )
     )
 
 

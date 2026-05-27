@@ -670,7 +670,79 @@ git push
 
 ---
 
-## 9. 每阶段验收门槛
+## Task 9: Reader fine mode 非 LLM 骨架
+
+**Files:**
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\core\schemas.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\reader\service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\memory\service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\handlers\memory_handler.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\api.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\mcp_server.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_reader.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_memory_surfaces.py`
+
+- [x] **Step 1: TDD 覆盖 deterministic fine reader**
+
+新增测试确认 `read_text_fine()` 不依赖 LLM，能从源文本中提取：
+
+```text
+Decision:
+Preference:
+Todo:
+Fact:
+Insight:
+Warning:
+```
+
+并输出：
+
+```text
+content_kind=fine_candidates
+metadata.reader.mode=fine
+metadata.reader.llm_required=false
+metadata.reader.candidate_count
+metadata.quality.hallucination_filter=deterministic_source_quote
+metadata.fine_candidates[]
+ReaderItem.evidence[]
+```
+
+- [x] **Step 2: TDD 覆盖 fine reader -> memory_candidates**
+
+新增测试确认 `create_memory_candidates_from_fine_reader()` 会把 fine candidates 写入 `memory_candidates`，保留 evidence quote/span 和 fine metadata。
+
+- [x] **Step 3: REST/MCP 调用面**
+
+新增 REST：
+
+```text
+POST /memory-candidates/from-fine-reader
+```
+
+新增 MCP：
+
+```text
+gcd_create_memory_candidates_from_fine_reader
+```
+
+- [x] **Step 4: 实现非 LLM 骨架**
+
+第一版 deliberately 不接 LLM，只接确定性 marker extractor，避免在本地/NAS 服务里直接引入不稳定重依赖。
+
+- [x] **Step 5: 验证提交**
+
+```powershell
+python -m pytest tests\test_reader.py tests\test_memory_surfaces.py -q
+python -m pytest -q
+python -m compileall app tools
+git add app tests docs
+git commit -m "feat: add deterministic reader fine mode"
+git push
+```
+
+---
+
+## 10. 每阶段验收门槛
 
 每个阶段完成前必须跑：
 
@@ -689,7 +761,7 @@ git diff --check
 
 ---
 
-## 10. 后续阶段触发条件
+## 11. 后续阶段触发条件
 
 - Scheduler SQLite 连续通过本地和 NAS 运行验证后，再做 Redis Streams。
 - Feedback 手动 apply 被实际使用后，再加 LLM action proposal。

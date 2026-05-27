@@ -13,6 +13,7 @@ from app.ingest.pipeline import ingest_text
 from app.reader.service import (
     ReaderItem,
     read_asset_manifest_fast,
+    read_text_fine,
     read_session_event_fast,
     read_text_fast,
     read_tool_trace_fast,
@@ -21,6 +22,7 @@ from app.retrieval.service import search_context
 from app.sessions.service import add_session_event, create_session
 from app.storage.bootstrap import bootstrap, reset_bootstrap
 from app.memory.service import (
+    create_memory_candidates_from_fine_reader,
     create_memory_candidate_from_reader,
     list_memory_evidence,
     promote_memory_candidate,
@@ -155,6 +157,47 @@ def test_reader_candidate_promotion_persists_evidence_span(reader_env):
     assert evidence[0]["quote"] == "Candidate promotion should preserve source-span evidence."
     assert evidence[0]["source_span"]["start"] == 0
     assert evidence[0]["source_span"]["end"] == len(evidence[0]["quote"])
+
+
+def test_reader_fine_mode_extracts_deterministic_candidates(reader_env):
+    item = read_text_fine(
+        source="project-note",
+        text=(
+            "普通背景说明。\n"
+            "Decision: Use SQLite scheduler before Redis.\n"
+            "Preference: Keep NAS-first storage and external media workers.\n"
+            "Todo: Add LLM fine reader later."
+        ),
+        cube_id="cube-fine",
+        tags=["fine"],
+        metadata={"doc": "reader-fine"},
+    )
+
+    assert item.content_kind == "fine_candidates"
+    assert item.metadata["reader"]["mode"] == "fine"
+    assert item.metadata["reader"]["llm_required"] is False
+    assert item.metadata["reader"]["candidate_count"] == 3
+    assert item.metadata["quality"]["hallucination_filter"] == "deterministic_source_quote"
+    assert [candidate["memory_type"] for candidate in item.metadata["fine_candidates"]] == ["decision", "preference", "todo"]
+    assert item.evidence[0].quote == "Use SQLite scheduler before Redis."
+    assert item.evidence[0].source_span.start == item.content.index("Decision:")
+    assert item.tags == ["fine", "reader_fine", "candidate"]
+
+
+def test_reader_fine_mode_can_create_memory_candidates(reader_env):
+    result = create_memory_candidates_from_fine_reader(
+        source="meeting-note",
+        text="Decision: Promote reader fine output through candidates.\nTodo: Review generated candidates.",
+        cube_id="cube-fine",
+        tags=["fine"],
+        created_by="fine-test",
+    )
+
+    assert result["created_count"] == 2
+    assert result["reader_item"]["metadata"]["reader"]["mode"] == "fine"
+    assert {candidate["metadata"]["fine"]["memory_type"] for candidate in result["candidates"]} == {"decision", "todo"}
+    assert result["candidates"][0]["status"] == "candidate"
+    assert result["candidates"][0]["evidence"][0]["quote"]
 
 
 def test_reader_integration_tags_vectors_with_reader_metadata(reader_env):

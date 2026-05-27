@@ -11,6 +11,15 @@ class IngestRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class FineReaderRequest(BaseModel):
+    source: str = "manual"
+    text: str
+    cube_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    created_by: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=20)

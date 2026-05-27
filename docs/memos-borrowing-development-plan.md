@@ -53,7 +53,7 @@ MemOS 把输入先读成统一 memory item，再进入存储/检索/治理。这
 - reader output 进入 `memory_candidates`。（已完成）
 - 通过 REST/MCP 暴露 candidate 创建、列表、promotion 和 lifecycle 查询。（已完成）
 - 增加 evidence/provenance/span 字段规范。（已完成：`ReaderEvidence`、`ReaderEvidenceSpan`、`memory_evidence.source_span`）
-- fine mode 后置：LLM 抽取、幻觉过滤、evidence quote。
+- fine mode 第一版骨架已完成：先用确定性 marker 抽取 `Decision/Preference/Todo/Fact/Insight/Warning`，输出 candidates + source quote + hallucination quality 标记；真实 LLM 抽取后置。
 
 ### 2.3 MemScheduler → SQLite Scheduler（下一阶段最高优先级）
 
@@ -182,7 +182,7 @@ conflicted
 
 | 能力 | 为什么后置 | 什么时候做 |
 |---|---|---|
-| Reader fine mode | 需要 LLM 配置、成本、质量评估 | Scheduler + Feedback 稳定后 |
+| Reader fine mode LLM 抽取 | 确定性骨架已完成；真实 LLM 仍需要配置、成本、质量评估 | Scheduler + Feedback 稳定后 |
 | Redis Streams / consumer group | 当前 NAS 单机先用 SQLite 验证语义 | 多 worker 或并发压力出现后 |
 | Hook/plugin runtime | 先把 handler/component 边界稳定 | 第三方 worker/OpenClaw 插件扩展时 |
 | Graph memory / subgraph | 现在先用 SQLite + LanceDB + evidence | lifecycle/feedback 数据积累后 |
@@ -217,10 +217,10 @@ conflicted
 6. Lifecycle events + reader candidates。
 7. Lifecycle/candidate REST + MCP 调用面。
 8. Reader evidence/provenance/span 规范。
+9. Reader fine mode 非 LLM 骨架。
 
 ### 再下一轮
 
-9. Reader fine mode。
 10. LLM feedback action proposal。
 11. Redis scheduler。
 12. Hook/plugin runtime。

@@ -1,5 +1,6 @@
 
 from hashlib import sha256
+import re
 from typing import Any
 
 from app.core.schemas import ReaderEvidence, ReaderEvidenceSpan, ReaderItem
@@ -70,6 +71,58 @@ def _tags(*groups: list[str] | tuple[str, ...] | None) -> list[str]:
     return result
 
 
+FINE_MARKERS: dict[str, str] = {
+    "decision": "Decision",
+    "preference": "Preference",
+    "todo": "Todo",
+    "fact": "Fact",
+    "insight": "Insight",
+    "warning": "Warning",
+}
+
+
+def _fine_candidates(text: str, source_domain: str, source_id: str) -> tuple[list[dict[str, Any]], list[ReaderEvidence]]:
+    candidates: list[dict[str, Any]] = []
+    evidence_items: list[ReaderEvidence] = []
+    marker_pattern = "|".join(re.escape(marker) for marker in FINE_MARKERS.values())
+    pattern = re.compile(rf"(?im)^\s*(?P<label>{marker_pattern})\s*:\s*(?P<quote>.+?)\s*$")
+    for match in pattern.finditer(text):
+        label = match.group("label").lower()
+        memory_type = next((key for key, marker in FINE_MARKERS.items() if marker.lower() == label), "fact")
+        quote = match.group("quote").strip()
+        if not quote:
+            continue
+        start = match.start("label")
+        evidence = ReaderEvidence(
+            source_domain=source_domain,
+            source_id=source_id,
+            quote=quote,
+            confidence=0.92,
+            source_span=_span(quote, start=start),
+            metadata={
+                "fine_marker": label,
+                "extractor": "deterministic_marker_v1",
+                "hallucination_filter": "source_quote_exact_match",
+            },
+        )
+        evidence_items.append(evidence)
+        candidates.append(
+            {
+                "memory_type": memory_type,
+                "content": quote,
+                "confidence": evidence.confidence,
+                "tags": [f"fine:{memory_type}"],
+                "evidence_index": len(evidence_items) - 1,
+                "quality": {
+                    "hallucination_risk": "low",
+                    "source_quote_exact_match": quote in text,
+                    "extractor": "deterministic_marker_v1",
+                },
+            }
+        )
+    return candidates, evidence_items
+
+
 def read_text_fast(
     *,
     source: str,
@@ -92,6 +145,47 @@ def read_text_fast(
         provenance=_provenance("document", source_id, {"source": source}),
         evidence=evidence,
         metadata=_reader_metadata(metadata, source=source, evidence_count=len(evidence)),
+    )
+
+
+def read_text_fine(
+    *,
+    source: str,
+    text: str,
+    cube_id: str | None = None,
+    tags: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> ReaderItem:
+    source_id = _hash(f"fine_document:{source}:{text}")
+    candidates, evidence = _fine_candidates(text, "document", source_id)
+    fine_tags = _tags(tags, ["reader_fine"], ["candidate"] if candidates else ["no_candidate"])
+    metadata_base = _reader_metadata(metadata, source=source, evidence_count=len(evidence))
+    return ReaderItem(
+        source_domain="document",
+        source_id=source_id,
+        cube_id=cube_id,
+        content=text,
+        content_kind="fine_candidates",
+        tags=fine_tags,
+        confidence=0.9 if candidates else 0.4,
+        provenance=_provenance("document", source_id, {"source": source, "reader_mode": "fine"}),
+        evidence=evidence,
+        metadata={
+            **metadata_base,
+            "reader": {
+                **(metadata_base.get("reader") or {}),
+                "mode": "fine",
+                "llm_required": False,
+                "candidate_count": len(candidates),
+                "extractor": "deterministic_marker_v1",
+            },
+            "quality": {
+                "hallucination_filter": "deterministic_source_quote",
+                "source_quote_required": True,
+                "llm_used": False,
+            },
+            "fine_candidates": candidates,
+        },
     )
 
 

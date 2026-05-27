@@ -98,3 +98,27 @@ def test_mcp_exposes_lifecycle_and_candidate_promotion(memory_surface_env):
     assert listed[0]["id"] == candidate["id"]
     assert promoted["candidate"]["promoted_memory_id"] == promoted["memory_id"]
     assert promoted["memory"]["source_kind"] == "reader_candidate"
+
+
+def test_rest_and_mcp_expose_fine_reader_candidate_creation(memory_surface_env):
+    client = TestClient(app)
+    rest_response = client.post(
+        "/memory-candidates/from-fine-reader",
+        json={"source": "rest-note", "text": "Decision: REST fine reader creates candidates.", "cube_id": "cube-rest"},
+    )
+
+    from app.mcp_server import gcd_create_memory_candidates_from_fine_reader
+
+    mcp_result = gcd_create_memory_candidates_from_fine_reader(
+        source="mcp-note",
+        text="Preference: MCP fine reader keeps deterministic source quotes.",
+        cube_id="cube-mcp",
+        created_by="mcp-test",
+    )
+
+    assert rest_response.status_code == 200
+    assert rest_response.json()["created_count"] == 1
+    assert rest_response.json()["reader_item"]["metadata"]["reader"]["mode"] == "fine"
+    assert rest_response.json()["candidates"][0]["metadata"]["fine"]["memory_type"] == "decision"
+    assert mcp_result["created_count"] == 1
+    assert mcp_result["candidates"][0]["metadata"]["fine"]["memory_type"] == "preference"
