@@ -827,6 +827,14 @@ def memory_feedback_actions_list(feedback_id: str, limit: int = 100) -> list[dic
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+@router.post("/memory-feedback/{feedback_id}/propose-actions", dependencies=[Depends(require_api_key)])
+def memory_feedback_actions_propose(feedback_id: str, planner: str = "deterministic") -> dict:
+    try:
+        return _feedback_handler().propose_actions(feedback_id, planner=planner)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @router.post("/memory-feedback/{feedback_id}/apply", dependencies=[Depends(require_api_key)])
 def memory_feedback_apply(feedback_id: str, actor: str = "memory_feedback") -> dict:
     try:

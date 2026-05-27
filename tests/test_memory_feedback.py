@@ -9,6 +9,7 @@ from app.memory.feedback_service import (
     add_memory_feedback_action,
     apply_memory_feedback,
     create_memory_feedback,
+    propose_memory_feedback_actions,
 )
 from app.memory.service import add_memory, list_memory_evidence, list_memory_versions
 from app.storage.bootstrap import bootstrap, reset_bootstrap
@@ -173,3 +174,70 @@ def test_feedback_apply_is_idempotent(feedback_env):
     assert first["applied"] == 1
     assert second["applied"] == 0
     assert len(evidence) == 1
+
+
+def test_feedback_proposal_generates_update_action_without_applying(feedback_env):
+    memory = _memory("Project tone is cold and industrial.")
+    feedback = create_memory_feedback(
+        MemoryFeedbackCreate(
+            feedback_text="Update content to: Project tone is warm and residential.",
+            target_memory_id=memory["id"],
+            created_by="tester",
+        )
+    )
+
+    proposal = propose_memory_feedback_actions(feedback["id"], planner="deterministic")
+    planned_actions = proposal["actions"]
+    unchanged = memories_repo().get(memory["id"])
+
+    assert proposal["feedback"]["status"] == "planned"
+    assert proposal["planner"]["mode"] == "deterministic"
+    assert proposal["proposed_count"] == 1
+    assert planned_actions[0]["action_type"] == "update"
+    assert planned_actions[0]["status"] == "proposed"
+    assert planned_actions[0]["payload"]["content"] == "Project tone is warm and residential."
+    assert planned_actions[0]["metadata"]["proposal"]["requires_review"] is True
+    assert unchanged["content"] == "Project tone is cold and industrial."
+
+    applied = apply_memory_feedback(feedback["id"], actor="reviewer")
+    updated = memories_repo().get(memory["id"])
+
+    assert applied["applied"] == 1
+    assert updated["content"] == "Project tone is warm and residential."
+
+
+def test_feedback_proposal_generates_archive_and_evidence_actions(feedback_env):
+    memory = _memory("Outdated memory with weak evidence.")
+    feedback = create_memory_feedback(
+        MemoryFeedbackCreate(
+            feedback_text="Archive this as obsolete. Evidence: User confirmed this is outdated.",
+            target_memory_id=memory["id"],
+            created_by="tester",
+        )
+    )
+
+    proposal = propose_memory_feedback_actions(feedback["id"], planner="deterministic")
+    action_types = [action["action_type"] for action in proposal["actions"]]
+
+    assert action_types == ["archive", "add_evidence"]
+    assert proposal["actions"][0]["payload"]["reason"] == "obsolete"
+    assert proposal["actions"][1]["payload"]["quote"] == "User confirmed this is outdated."
+
+
+def test_feedback_proposal_api_and_mcp_surfaces(feedback_env):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.mcp_server import gcd_propose_memory_feedback_actions
+
+    memory = _memory("API/MCP proposal memory.")
+    feedback = _feedback(memory["id"])
+    client = TestClient(app)
+
+    api_response = client.post(f"/memory-feedback/{feedback['id']}/propose-actions")
+    mcp_result = gcd_propose_memory_feedback_actions(feedback["id"], planner="deterministic")
+
+    assert api_response.status_code == 200
+    assert api_response.json()["planner"]["mode"] == "deterministic"
+    assert api_response.json()["actions"][0]["action_type"] == "add_evidence"
+    assert mcp_result["actions"][0]["status"] == "proposed"

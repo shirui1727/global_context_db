@@ -123,6 +123,15 @@ reject
 
 后面再做 LLM 自动生成 action proposal。
 
+当前已补第一版 proposal 骨架：不直接接 LLM，先用 deterministic planner 从反馈文本生成可审核 action proposal，状态为 `proposed`，不会自动修改正式 memory；审核后仍走同一套 `apply_memory_feedback()`。
+
+新增调用面：
+
+```text
+POST /memory-feedback/{feedback_id}/propose-actions
+gcd_propose_memory_feedback_actions
+```
+
 ### 2.5 Components + Handlers → 组件初始化和 API/MCP 分层
 
 MemOS 把 component init、handler、scheduler、reader、feedback 拆开。当前 `api.py` / `mcp_server.py` / `repo.py` 已偏大，继续堆会失控。
@@ -221,10 +230,11 @@ conflicted
 
 ### 再下一轮
 
-10. LLM feedback action proposal。
-11. Redis scheduler。
-12. Hook/plugin runtime。
-13. dashboard / graph memory。
+10. Feedback action proposal 非 LLM 骨架。
+11. LLM feedback action proposal。
+12. Redis scheduler。
+13. Hook/plugin runtime。
+14. dashboard / graph memory。
 
 ---
 

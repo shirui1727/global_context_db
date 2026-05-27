@@ -742,7 +742,62 @@ git push
 
 ---
 
-## 10. 每阶段验收门槛
+## Task 10: Feedback action proposal 非 LLM 骨架
+
+**Files:**
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\memory\feedback_service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\handlers\feedback_handler.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\api.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\mcp_server.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_memory_feedback.py`
+
+- [x] **Step 1: TDD 覆盖 proposal 不直接 apply**
+
+新增测试确认 `propose_memory_feedback_actions()` 生成 `status=proposed` action，不修改正式 memory；之后仍可通过 `apply_memory_feedback()` 审核应用。
+
+- [x] **Step 2: TDD 覆盖确定性 planner**
+
+第一版支持：
+
+```text
+Update content to: ... -> update
+Archive / obsolete / outdated -> archive
+Evidence: ... -> add_evidence
+无 target_memory_id -> create_memory fallback
+```
+
+- [x] **Step 3: REST/MCP 调用面**
+
+新增 REST：
+
+```text
+POST /memory-feedback/{feedback_id}/propose-actions
+```
+
+新增 MCP：
+
+```text
+gcd_propose_memory_feedback_actions
+```
+
+- [x] **Step 4: 保持可替换 LLM planner 边界**
+
+当前 `planner=deterministic`，返回 `planner.llm_used=false`；真实 LLM action proposal 后续替换 planner，不改变 apply 路径。
+
+- [x] **Step 5: 验证提交**
+
+```powershell
+python -m pytest tests\test_memory_feedback.py -q
+python -m pytest -q
+python -m compileall app tools
+git add app tests docs
+git commit -m "feat: add feedback action proposals"
+git push
+```
+
+---
+
+## 11. 每阶段验收门槛
 
 每个阶段完成前必须跑：
 
@@ -761,7 +816,7 @@ git diff --check
 
 ---
 
-## 11. 后续阶段触发条件
+## 12. 后续阶段触发条件
 
 - Scheduler SQLite 连续通过本地和 NAS 运行验证后，再做 Redis Streams。
 - Feedback 手动 apply 被实际使用后，再加 LLM action proposal。

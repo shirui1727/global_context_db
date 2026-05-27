@@ -428,6 +428,18 @@ def gcd_list_memory_feedback_actions(feedback_id: str, limit: int = 100) -> list
 
 
 @mcp.tool()
+def gcd_propose_memory_feedback_actions(
+    feedback_id: str,
+    planner: str = "deterministic",
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Generate reviewable action proposals for memory feedback without applying them."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return _feedback_handler().propose_actions(feedback_id, planner=planner)
+
+
+@mcp.tool()
 def gcd_apply_memory_feedback(
     feedback_id: str,
     actor: str = "memory_feedback",

@@ -22,5 +22,8 @@ class FeedbackHandler:
     def list_actions(self, feedback_id: str, limit: int = 100) -> list[dict]:
         return feedback_service.list_memory_feedback_actions(feedback_id, limit=limit)
 
+    def propose_actions(self, feedback_id: str, planner: str = "deterministic") -> dict[str, Any]:
+        return feedback_service.propose_memory_feedback_actions(feedback_id, planner=planner)
+
     def apply(self, feedback_id: str, actor: str = "memory_feedback") -> dict[str, Any]:
         return feedback_service.apply_memory_feedback(feedback_id, actor=actor)

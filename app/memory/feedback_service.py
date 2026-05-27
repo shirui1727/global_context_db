@@ -9,7 +9,7 @@ from app.storage.repo import audit_logs_repo, memory_feedback_actions_repo, memo
 
 ACTION_TYPES = {"update", "archive", "add_evidence", "create_memory", "reject"}
 FEEDBACK_STATUSES = {"pending", "planned", "applied", "rejected"}
-ACTION_STATUSES = {"pending", "applied", "rejected", "failed"}
+ACTION_STATUSES = {"proposed", "pending", "applied", "rejected", "failed"}
 
 
 def _now() -> str:
@@ -94,6 +94,136 @@ def list_memory_feedback_actions(feedback_id: str, limit: int = 100) -> list[dic
     if not memory_feedback_repo().get(feedback_id):
         raise ValueError("memory feedback not found")
     return memory_feedback_actions_repo().list_by_feedback(feedback_id, limit)
+
+
+def propose_memory_feedback_actions(feedback_id: str, planner: str = "deterministic") -> dict:
+    if planner != "deterministic":
+        raise ValueError("only deterministic planner is available")
+    feedback = memory_feedback_repo().get(feedback_id)
+    if not feedback:
+        raise ValueError("memory feedback not found")
+    proposals = _plan_actions(feedback)
+    actions = []
+    for index, proposal in enumerate(proposals):
+        action_id = _hash(f"feedback-action-proposal:{feedback_id}:{index}:{proposal['action_type']}:{proposal.get('payload')}")
+        metadata = {
+            **(proposal.get("metadata") or {}),
+            "proposal": {
+                "planner": planner,
+                "mode": "deterministic",
+                "requires_review": True,
+                "proposal_index": index,
+            },
+        }
+        actions.append(
+            memory_feedback_actions_repo().upsert(
+                {
+                    "id": action_id,
+                    "feedback_id": feedback_id,
+                    "action_type": _validate_action_type(proposal["action_type"]),
+                    "target_memory_id": proposal.get("target_memory_id") or feedback.get("target_memory_id"),
+                    "payload": proposal.get("payload") or {},
+                    "status": "proposed",
+                    "applied_at": None,
+                    "metadata": metadata,
+                }
+            )
+        )
+    now = _now()
+    saved_feedback = memory_feedback_repo().upsert(
+        {
+            **feedback,
+            "status": "planned" if actions else feedback["status"],
+            "updated_at": now,
+            "metadata": {
+                **(feedback.get("metadata") or {}),
+                "proposal": {"planner": planner, "mode": "deterministic", "proposed_count": len(actions), "updated_at": now},
+            },
+        }
+    )
+    _audit("memory_feedback.proposed_actions", feedback_id, feedback.get("created_by") or "memory_feedback", {"proposed_count": len(actions), "planner": planner})
+    return {"feedback": saved_feedback, "actions": actions, "proposed_count": len(actions), "planner": {"mode": planner, "llm_used": False}}
+
+
+def _plan_actions(feedback: dict) -> list[dict]:
+    text = feedback.get("feedback_text") or ""
+    lowered = text.lower()
+    actions: list[dict[str, Any]] = []
+    update_content = _extract_after_marker(text, ["update content to:", "correct content to:", "set content to:"])
+    if update_content:
+        actions.append(
+            {
+                "action_type": "update",
+                "payload": {"content": update_content},
+                "metadata": {"reason": "deterministic update marker"},
+            }
+        )
+    if any(marker in lowered for marker in ["archive", "obsolete", "outdated", "deprecated"]):
+        actions.append(
+            {
+                "action_type": "archive",
+                "payload": {"reason": "obsolete" if "obsolete" in lowered else "outdated" if "outdated" in lowered else "feedback requested archive"},
+                "metadata": {"reason": "deterministic archive marker"},
+            }
+        )
+    evidence_quote = _extract_after_marker(text, ["evidence:", "source quote:", "quote:"])
+    if evidence_quote:
+        actions.append(
+            {
+                "action_type": "add_evidence",
+                "payload": {
+                    "source_domain": "feedback",
+                    "source_id": feedback["id"],
+                    "quote": evidence_quote,
+                    "confidence": 0.9,
+                },
+                "metadata": {"reason": "deterministic evidence marker"},
+            }
+        )
+    if not actions and feedback.get("target_memory_id"):
+        actions.append(
+            {
+                "action_type": "add_evidence",
+                "payload": {
+                    "source_domain": "feedback",
+                    "source_id": feedback["id"],
+                    "quote": text,
+                    "confidence": 0.7,
+                },
+                "metadata": {"reason": "fallback evidence proposal"},
+            }
+        )
+    if not actions and not feedback.get("target_memory_id") and text.strip():
+        actions.append(
+            {
+                "action_type": "create_memory",
+                "payload": {
+                    "content": text.strip(),
+                    "cube_id": feedback.get("cube_id"),
+                    "tags": ["feedback"],
+                    "source_kind": "feedback_proposal",
+                },
+                "metadata": {"reason": "fallback create memory proposal"},
+            }
+        )
+    return actions
+
+
+def _extract_after_marker(text: str, markers: list[str]) -> str | None:
+    lowered = text.lower()
+    best: tuple[int, str] | None = None
+    for marker in markers:
+        index = lowered.find(marker)
+        if index >= 0 and (best is None or index < best[0]):
+            best = (index, marker)
+    if best is None:
+        return None
+    start = best[0] + len(best[1])
+    tail = text[start:].strip()
+    for separator in ["\n", "。", "；", ";"]:
+        if separator in tail:
+            tail = tail.split(separator, 1)[0].strip()
+    return tail or None
 
 
 def apply_memory_feedback(feedback_id: str, actor: str = "memory_feedback") -> dict:
