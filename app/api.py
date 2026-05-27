@@ -30,6 +30,9 @@ from app.core.schemas import (
     FileReferenceUpdate,
     FeedCreateRequest,
     ForgetRequest,
+    HookEventDispatch,
+    HookEventEmit,
+    HookSubscriptionCreate,
     ImprovementTaskCreate,
     ImprovementTaskUpdate,
     ImproveRequest,
@@ -80,6 +83,7 @@ from app.files.service import add_file_reference, list_file_references, update_f
 from app.governance.service import diagnostics
 from app.handlers.cube_handler import CubeHandler
 from app.handlers.feedback_handler import FeedbackHandler
+from app.handlers.hook_handler import HookHandler
 from app.handlers.memory_handler import MemoryHandler
 from app.handlers.scheduler_handler import SchedulerHandler
 from app.runtime.components import get_runtime_components
@@ -135,6 +139,10 @@ def _scheduler_handler() -> SchedulerHandler:
 
 def _feedback_handler() -> FeedbackHandler:
     return FeedbackHandler(get_runtime_components(settings))
+
+
+def _hook_handler() -> HookHandler:
+    return HookHandler(get_runtime_components(settings))
 
 
 def _memory_handler() -> MemoryHandler:
@@ -580,6 +588,48 @@ def scheduler_release_expired() -> dict:
 @router.get("/scheduler/status")
 def scheduler_status_get() -> dict:
     return _scheduler_handler().status()
+
+
+@router.post("/hooks/subscriptions", dependencies=[Depends(require_api_key)])
+def hooks_subscriptions_create(payload: HookSubscriptionCreate) -> dict:
+    try:
+        return _hook_handler().create_subscription(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/hooks/subscriptions")
+def hooks_subscriptions_list(
+    hook_name: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    return _hook_handler().list_subscriptions(hook_name=hook_name, status=status, limit=limit)
+
+
+@router.post("/hooks/events", dependencies=[Depends(require_api_key)])
+def hooks_events_emit(payload: HookEventEmit) -> dict:
+    try:
+        return _hook_handler().emit_event(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/hooks/events")
+def hooks_events_list(
+    hook_name: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    return _hook_handler().list_events(hook_name=hook_name, status=status, limit=limit)
+
+
+@router.post("/hooks/events/{event_id}/dispatch", dependencies=[Depends(require_api_key)])
+def hooks_events_dispatch(event_id: str, payload: HookEventDispatch | None = None) -> dict:
+    try:
+        return _hook_handler().mark_dispatched(event_id, metadata=(payload.metadata if payload else None))
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @router.post("/assets/scan-runs", dependencies=[Depends(require_api_key)])

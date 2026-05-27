@@ -168,6 +168,37 @@ def init_sqlite(path: Path) -> None:
     )
     conn.execute(
         """
+        create table if not exists hook_subscriptions (
+            id text primary key,
+            hook_name text,
+            target_kind text default 'queue',
+            target_ref text,
+            status text default 'active',
+            created_by text,
+            created_at text,
+            updated_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists hook_events (
+            id text primary key,
+            hook_name text,
+            subscription_id text,
+            source_kind text,
+            source_id text,
+            payload text default '{}',
+            status text default 'queued',
+            created_at text,
+            dispatched_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
         create table if not exists memory_promotion_proposals (
             id text primary key,
             source_session_id text,
@@ -605,6 +636,9 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         "create index if not exists idx_memory_lifecycle_kind on memory_lifecycle_events(event_kind)",
         "create index if not exists idx_memory_candidates_status on memory_candidates(status)",
         "create index if not exists idx_memory_candidates_source on memory_candidates(source_domain, source_id)",
+        "create index if not exists idx_hook_subscriptions_name_status on hook_subscriptions(hook_name, status)",
+        "create index if not exists idx_hook_events_name_status on hook_events(hook_name, status)",
+        "create index if not exists idx_hook_events_subscription on hook_events(subscription_id)",
         "create index if not exists idx_memory_promotions_status on memory_promotion_proposals(status)",
         "create index if not exists idx_memory_promotions_session on memory_promotion_proposals(source_session_id)",
         "create index if not exists idx_asset_locations_asset_id on asset_locations(asset_id)",
@@ -675,6 +709,8 @@ def db_counts() -> dict[str, int]:
         "memory_candidates",
         "memory_feedback",
         "memory_feedback_actions",
+        "hook_subscriptions",
+        "hook_events",
         "memory_promotion_proposals",
         "audit_logs",
         "captures",
@@ -2759,6 +2795,178 @@ class MemoryFeedbackActionsRepo:
         }
 
 
+class HookSubscriptionsRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into hook_subscriptions(
+                    id, hook_name, target_kind, target_ref, status, created_by, created_at, updated_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    hook_name=excluded.hook_name,
+                    target_kind=excluded.target_kind,
+                    target_ref=excluded.target_ref,
+                    status=excluded.status,
+                    updated_at=excluded.updated_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("hook_name"),
+                    row.get("target_kind") or "queue",
+                    row.get("target_ref"),
+                    row.get("status") or "active",
+                    row.get("created_by"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(row["id"])
+
+    def get(self, subscription_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, hook_name, target_kind, target_ref, status, created_by, created_at, updated_at, metadata
+                from hook_subscriptions
+                where id = ?
+                """,
+                (subscription_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def first_active_for_hook(self, hook_name: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, hook_name, target_kind, target_ref, status, created_by, created_at, updated_at, metadata
+                from hook_subscriptions
+                where hook_name = ? and status = 'active'
+                order by created_at asc, rowid asc
+                limit 1
+                """,
+                (hook_name,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_recent(self, limit: int = 100, hook_name: str | None = None, status: str | None = None) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if hook_name:
+            where.append("hook_name = ?")
+            params.append(hook_name)
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        query = """
+            select id, hook_name, target_kind, target_ref, status, created_by, created_at, updated_at, metadata
+            from hook_subscriptions
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by created_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "hook_name": row[1],
+            "target_kind": row[2] or "queue",
+            "target_ref": row[3],
+            "status": row[4] or "active",
+            "created_by": row[5],
+            "created_at": row[6],
+            "updated_at": row[7],
+            "metadata": _json_loads(row[8], {}),
+        }
+
+
+class HookEventsRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into hook_events(
+                    id, hook_name, subscription_id, source_kind, source_id, payload, status, created_at, dispatched_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    hook_name=excluded.hook_name,
+                    subscription_id=excluded.subscription_id,
+                    source_kind=excluded.source_kind,
+                    source_id=excluded.source_id,
+                    payload=excluded.payload,
+                    status=excluded.status,
+                    dispatched_at=excluded.dispatched_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("hook_name"),
+                    row.get("subscription_id"),
+                    row.get("source_kind") or "manual",
+                    row.get("source_id"),
+                    json.dumps(row.get("payload") or {}, ensure_ascii=False),
+                    row.get("status") or "queued",
+                    row.get("created_at"),
+                    row.get("dispatched_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(row["id"])
+
+    def get(self, event_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, hook_name, subscription_id, source_kind, source_id, payload, status, created_at, dispatched_at, metadata
+                from hook_events
+                where id = ?
+                """,
+                (event_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_recent(self, limit: int = 100, hook_name: str | None = None, status: str | None = None) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if hook_name:
+            where.append("hook_name = ?")
+            params.append(hook_name)
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        query = """
+            select id, hook_name, subscription_id, source_kind, source_id, payload, status, created_at, dispatched_at, metadata
+            from hook_events
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by created_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "hook_name": row[1],
+            "subscription_id": row[2],
+            "source_kind": row[3] or "manual",
+            "source_id": row[4],
+            "payload": _json_loads(row[5], {}),
+            "status": row[6] or "queued",
+            "created_at": row[7],
+            "dispatched_at": row[8],
+            "metadata": _json_loads(row[9], {}),
+        }
+
+
 class MemoryPromotionProposalsRepo:
     def upsert(self, row: dict) -> dict:
         with _conn() as conn:
@@ -3272,6 +3480,14 @@ def memory_feedback_repo() -> MemoryFeedbackRepo:
 
 def memory_feedback_actions_repo() -> MemoryFeedbackActionsRepo:
     return MemoryFeedbackActionsRepo()
+
+
+def hook_subscriptions_repo() -> HookSubscriptionsRepo:
+    return HookSubscriptionsRepo()
+
+
+def hook_events_repo() -> HookEventsRepo:
+    return HookEventsRepo()
 
 
 def memory_promotion_proposals_repo() -> MemoryPromotionProposalsRepo:

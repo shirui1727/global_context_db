@@ -185,6 +185,17 @@ deleted
 conflicted
 ```
 
+### 2.7 Hook/plugin runtime → 轻量事件队列（当前实现）
+
+第三方 worker、OpenClaw、NAS 扩展需要稳定接入点，但当前阶段不做重插件系统，也不让主服务执行外部脚本。
+
+本阶段落点：
+
+- `hook_subscriptions`：声明关注的 `hook_name`、`target_kind/target_ref`、状态和 metadata。
+- `hook_events`：事件只入队或记录 `no_subscriber`，由外部 worker 查询后处理。
+- REST/MCP：创建订阅、发事件、列事件、标记 dispatched。
+- 安全边界：GCD 只记录/排队事件，不执行任意插件代码。
+
 ---
 
 ## 3. 后面再引入
@@ -231,9 +242,9 @@ conflicted
 ### 再下一轮
 
 10. Feedback action proposal 非 LLM 骨架。
-11. LLM feedback action proposal。
-12. Redis scheduler。
-13. Hook/plugin runtime。
+11. Hook/plugin runtime 非重依赖骨架。
+12. LLM feedback action proposal。
+13. Redis scheduler。
 14. dashboard / graph memory。
 
 ---
@@ -260,6 +271,4 @@ git push
 
 ## 7. 下一步明确任务
 
-从 `docs/superpowers/plans/2026-05-27-memos-maturity-rebuild.md` 的 **Task 1: SQLite Scheduler schema + repo** 开始执行。
-
-不要再继续修修补补旧 improvement queue；直接把它升级成可 claim、可 retry、可恢复、可按 queue/cube 隔离的 scheduler 状态机。
+当前进入 **Task 11: Hook/plugin runtime 非重依赖骨架**：只做 hook 订阅、事件入队、列表查询和人工标记 dispatched；不执行任意外部代码，不做插件市场。

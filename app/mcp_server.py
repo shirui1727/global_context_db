@@ -21,6 +21,8 @@ from app.core.schemas import (
     FileReferenceUpdate,
     ForgetRequest,
     FineReaderRequest,
+    HookEventEmit,
+    HookSubscriptionCreate,
     ImprovementTaskCreate,
     ImprovementTaskUpdate,
     ImproveRequest,
@@ -60,6 +62,7 @@ from app.files.service import add_file_reference, list_file_references, update_f
 from app.governance.service import diagnostics
 from app.handlers.cube_handler import CubeHandler
 from app.handlers.feedback_handler import FeedbackHandler
+from app.handlers.hook_handler import HookHandler
 from app.handlers.memory_handler import MemoryHandler
 from app.handlers.scheduler_handler import SchedulerHandler
 from app.runtime.components import get_runtime_components
@@ -114,6 +117,10 @@ def _scheduler_handler() -> SchedulerHandler:
 
 def _feedback_handler() -> FeedbackHandler:
     return FeedbackHandler(get_runtime_components(settings))
+
+
+def _hook_handler() -> HookHandler:
+    return HookHandler(get_runtime_components(settings))
 
 
 def _memory_handler() -> MemoryHandler:
@@ -1230,6 +1237,88 @@ def gcd_scheduler_status() -> dict[str, Any]:
     """Return scheduler task counts by status and kind."""
     bootstrap(settings)
     return _scheduler_handler().status()
+
+
+@mcp.tool()
+def gcd_create_hook_subscription(
+    hook_name: str,
+    target_kind: str = "queue",
+    target_ref: str | None = None,
+    status: str = "active",
+    created_by: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Create a lightweight hook subscription that queues matching events."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return _hook_handler().create_subscription(
+        HookSubscriptionCreate(
+            hook_name=hook_name,
+            target_kind=target_kind,
+            target_ref=target_ref,
+            status=status,
+            created_by=created_by,
+            metadata=metadata or {},
+        )
+    )
+
+
+@mcp.tool()
+def gcd_list_hook_subscriptions(
+    hook_name: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """List hook subscriptions."""
+    bootstrap(settings)
+    return _hook_handler().list_subscriptions(hook_name=hook_name, status=status, limit=limit)
+
+
+@mcp.tool()
+def gcd_emit_hook_event(
+    hook_name: str,
+    source_kind: str = "manual",
+    source_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Emit a hook event into the local queue without executing external code."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return _hook_handler().emit_event(
+        HookEventEmit(
+            hook_name=hook_name,
+            source_kind=source_kind,
+            source_id=source_id,
+            payload=payload or {},
+            metadata=metadata or {},
+        )
+    )
+
+
+@mcp.tool()
+def gcd_list_hook_events(
+    hook_name: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """List hook events."""
+    bootstrap(settings)
+    return _hook_handler().list_events(hook_name=hook_name, status=status, limit=limit)
+
+
+@mcp.tool()
+def gcd_mark_hook_event_dispatched(
+    event_id: str,
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Mark a queued hook event as dispatched after an external worker handles it."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return _hook_handler().mark_dispatched(event_id, metadata=metadata or {})
 
 
 @mcp.tool()

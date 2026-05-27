@@ -271,6 +271,27 @@ class MemoryFeedbackActionCreate(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class HookSubscriptionCreate(BaseModel):
+    hook_name: str
+    target_kind: str = "queue"
+    target_ref: str | None = None
+    status: str = "active"
+    created_by: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class HookEventEmit(BaseModel):
+    hook_name: str
+    source_kind: str = "manual"
+    source_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class HookEventDispatch(BaseModel):
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class MemoryEvidenceCreate(BaseModel):
     source_domain: str
     source_id: str

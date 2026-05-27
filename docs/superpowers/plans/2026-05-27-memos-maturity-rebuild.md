@@ -29,7 +29,7 @@
 |---|---|---|
 | Reader fine mode / hallucination filter / evidence quote LLM 抽取 | 需要稳定 LLM 配置和成本控制 | Scheduler + Feedback 稳定后 |
 | Redis Streams / consumer group / distributed scheduler | 当前 NAS 单机优先，SQLite 足够验证语义 | 多 worker 并发或远程负载上来后 |
-| Hook/plugin runtime | 现在先把 handler 边界抽清楚 | 第三方 worker、OpenClaw 插件、NAS 扩展需要接入时 |
+| Hook/plugin runtime | hook_subscriptions / hook_events / REST-MCP hook tools | external workers need stable event entrypoints |
 | Graph memory / subgraph dashboard | 当前 SQLite + LanceDB 已能服务检索 | memory lifecycle 和 feedback 数据足够后 |
 | Reranker / agentic search / deep search | 会增加复杂依赖 | 基础 recall 质量瓶颈明确后 |
 | User manager / enterprise ACL | 当前是个人/NAS 工具链 | 多真实用户共享并需要权限隔离时 |
@@ -820,5 +820,47 @@ git diff --check
 
 - Scheduler SQLite 连续通过本地和 NAS 运行验证后，再做 Redis Streams。
 - Feedback 手动 apply 被实际使用后，再加 LLM action proposal。
-- Handler 边界稳定后，再做 Hook/plugin runtime。
+- Hook/plugin runtime 当前先落地轻量事件队列；后续如确有需要，再做更复杂插件治理。
 - 记忆纠错/版本数据积累后，再做 graph/dashboard。
+
+---
+
+## Task 11: Hook/plugin runtime 非重依赖骨架
+
+**Files:**
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\core\schemas.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\hooks\service.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\handlers\hook_handler.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\api.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\mcp_server.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_hooks.py`
+
+目标：给第三方 worker / OpenClaw / NAS 扩展提供稳定事件接入点，但不做插件市场，不执行任意外部代码。
+
+- [x] 写失败测试：订阅 `memory.created` 后 emit event，事件进入 `queued` 并带 `subscription_id`。
+- [x] 写失败测试：无订阅时 emit event，事件仍记录为 `no_subscriber`。
+- [x] 写失败测试：REST/MCP 暴露订阅、发事件、查事件、标记 dispatched。
+- [x] 新增 schema：`HookSubscriptionCreate`、`HookEventEmit`、`HookEventDispatch`。
+- [x] 新增 SQLite 表：`hook_subscriptions`、`hook_events`。
+- [x] 新增 service/handler：只负责记录、排队、查询、标记 dispatched。
+- [x] 新增 REST：`POST/GET /hooks/subscriptions`、`POST/GET /hooks/events`、`POST /hooks/events/{event_id}/dispatch`。
+- [x] 新增 MCP：`gcd_create_hook_subscription`、`gcd_list_hook_subscriptions`、`gcd_emit_hook_event`、`gcd_list_hook_events`、`gcd_mark_hook_event_dispatched`。
+
+验证：
+
+```powershell
+python -m pytest tests\test_hooks.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+提交：
+
+```powershell
+git add app tests docs
+git commit -m "feat: add hook runtime event queue"
+git push
+```
