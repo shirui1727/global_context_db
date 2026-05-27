@@ -1377,6 +1377,7 @@ def gcd_improve(
 def gcd_remember(
     content_type: str = "memory",
     cube_id: str | None = None,
+    writable_cube_ids: list[str] | None = None,
     content: str = "",
     source: str = "remember",
     session_id: str | None = None,
@@ -1398,6 +1399,7 @@ def gcd_remember(
             content=content,
             source=source,
             cube_id=cube_id,
+            writable_cube_ids=writable_cube_ids or [],
             session_id=session_id,
             project_path=project_path,
             tags=tags or [],

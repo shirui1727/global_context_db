@@ -248,7 +248,7 @@ conflicted
 13. LLM feedback action proposal.
 14. Redis scheduler.
 15. dashboard / graph memory.
-16. writable cube strategy. (memory + asset fan-out done)
+16. writable cube strategy. (memory + asset + remember routing done)
 17. cube snapshot/export/import. (portable payload done)
 
 ---

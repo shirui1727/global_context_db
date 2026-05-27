@@ -280,3 +280,47 @@ def test_writable_cube_ids_fan_out_memory_writes(cube_env):
     assert by_cube[project["id"]]["content"] == "Writable cube fan-out stores this memory in project and shared cubes."
     assert by_cube[shared["id"]]["content"] == "Writable cube fan-out stores this memory in project and shared cubes."
     assert by_cube[project["id"]]["id"] != by_cube[shared["id"]]["id"]
+
+
+def test_remember_uses_writable_cube_ids_for_memory_and_asset(cube_env):
+    from app.control.service import remember
+    from app.core.schemas import RememberRequest
+    from app.cubes.service import create_cube
+    from app.memory.service import list_memories
+    from app.storage.repo import assets_repo
+
+    project = create_cube(ContextCubeCreate(name="Remember Writable Project", cube_type="project", owner_id="remember-project"))
+    shared = create_cube(ContextCubeCreate(name="Remember Writable Shared", cube_type="shared", owner_id="remember-team", visibility="shared"))
+
+    memory_result = remember(
+        RememberRequest(
+            content_type="memory",
+            content="Remember endpoint writes to project and shared cubes.",
+            writable_cube_ids=[project["id"], shared["id"]],
+            agent_id="codex",
+        )
+    )
+    asset_result = remember(
+        RememberRequest(
+            content_type="asset",
+            writable_cube_ids=[project["id"], shared["id"]],
+            asset={
+                "uri": "smb://NAS/remember/fanout.jpg",
+                "asset_key": "remember:fanout",
+                "checksum": "sha-remember-fanout",
+                "summary": "Remember endpoint asset fan-out.",
+                "asset_kind": "image",
+                "trust_level": "verified",
+            },
+        )
+    )
+
+    memories_by_cube = {memory["cube_id"]: memory for memory in list_memories(limit=20)}
+    assets_by_cube = {asset["cube_id"]: asset for asset in assets_repo().list_recent(limit=20)}
+
+    assert memory_result["result"]["write_scope"]["writable_cube_ids"] == [project["id"], shared["id"]]
+    assert project["id"] in memories_by_cube
+    assert shared["id"] in memories_by_cube
+    assert asset_result["result"]["write_scope"]["writable_cube_ids"] == [project["id"], shared["id"]]
+    assert project["id"] in assets_by_cube
+    assert shared["id"] in assets_by_cube

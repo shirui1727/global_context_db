@@ -226,6 +226,7 @@ class RememberRequest(BaseModel):
     content: str = ""
     source: str = "remember"
     cube_id: str | None = None
+    writable_cube_ids: list[str] = Field(default_factory=list)
     session_id: str | None = None
     project_path: str | None = None
     tags: list[str] = Field(default_factory=list)

@@ -1045,3 +1045,34 @@ git add app tests docs
 git commit -m "feat: add asset writable cube fan out"
 git push
 ```
+
+
+---
+
+## Task 18: Remember writable cube routing
+
+Goal: move MemOS-style write scope from low-level services into the high-level `remember` product verb so agent clients can write memory/assets to multiple cubes through one stable entrypoint.
+
+- [x] RED test: `RememberRequest(content_type=memory|asset, writable_cube_ids=[project, shared])` fans out to both cubes.
+- [x] Add `writable_cube_ids` to `RememberRequest`.
+- [x] Wire `control.remember()` memory path to `MemoryCreate.writable_cube_ids`.
+- [x] Wire `control.remember()` asset path to `AssetCreate.writable_cube_ids` without changing the external worker boundary.
+- [x] Expose `writable_cube_ids` on MCP `gcd_remember`; REST `/remember` already accepts the schema field.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_cubes.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+Commit:
+
+```powershell
+git add app tests docs
+git commit -m "feat: route remember writable cube ids"
+git push
+```

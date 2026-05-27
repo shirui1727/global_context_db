@@ -27,6 +27,7 @@ def remember(payload: RememberRequest) -> dict:
             "result": add_memory(
                 MemoryCreate(
                     cube_id=payload.cube_id,
+                    writable_cube_ids=payload.writable_cube_ids,
                     content=payload.content,
                     tags=payload.tags,
                     user_id=payload.user_id,
@@ -54,6 +55,8 @@ def remember(payload: RememberRequest) -> dict:
     if content_type == "asset":
         asset_payload = {**(payload.asset or {})}
         asset_payload.setdefault("cube_id", payload.cube_id)
+        if payload.writable_cube_ids and not asset_payload.get("writable_cube_ids"):
+            asset_payload["writable_cube_ids"] = payload.writable_cube_ids
         return {
             "content_type": content_type,
             "result": create_asset(AssetCreate(**asset_payload)),
