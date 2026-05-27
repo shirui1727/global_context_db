@@ -864,3 +864,35 @@ git add app tests docs
 git commit -m "feat: add hook runtime event queue"
 git push
 ```
+
+
+---
+
+## Task 12: Hook runtime domain event emission
+
+Goal: make the hook runtime more than a manual queue by wiring it into real domain service lifecycle events. Safety boundary remains unchanged: GCD records queued events only and does not execute external plugin code.
+
+- [x] RED test: `add_memory()`, `update_session(status="ended")`, and `create_asset()` emit queued hook events when subscriptions exist.
+- [x] Add `emit_domain_event()` as the service-layer emission boundary.
+- [x] Memory service emits: `memory.created`, `memory.updated`, `memory.deleted`, `memory_evidence.created`, `memory_promotion.*`, `memory_candidate.promoted`.
+- [x] Session service emits: `session.created`, `session.updated`, `session.ended`, `session_event.<event_type>`, `session_trace.recorded`.
+- [x] Asset service emits: `asset.created/updated/status_changed`, `asset_artifact.*`, `asset_analysis.registered`, `asset_scan.completed`.
+- [x] Preserve safety: events are only persisted to `hook_events`; external workers poll and handle them outside GCD.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_hooks.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+Commit:
+
+```powershell
+git add app tests docs
+git commit -m "feat: emit hooks from domain services"
+git push
+```

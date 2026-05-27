@@ -11,6 +11,7 @@ from app.core.schemas import (
     SessionTraceCreate,
     SessionUpdate,
 )
+from app.hooks.service import emit_domain_event
 from app.memory.service import search_memory
 from app.reader.service import read_session_event_fast, read_tool_trace_fast
 from app.retrieval.service import search_context
@@ -117,6 +118,12 @@ def create_session(payload: SessionCreate) -> dict:
             metadata={"source_agent": payload.source_agent, "project_path": payload.project_path},
         ),
     )
+    emit_domain_event(
+        "session.created",
+        source_kind="session",
+        source_id=session_id,
+        payload={"session_id": session_id, "cube_id": payload.cube_id, "source_agent": payload.source_agent, "project_path": payload.project_path, "status": status},
+    )
     return get_session(session_id)
 
 
@@ -160,10 +167,22 @@ def update_session(session_id: str, payload: SessionUpdate) -> dict:
     }
     agent_sessions_repo().upsert(updated)
     _audit("session.updated", session_id, updated.get("created_by") or "session_writer", {"status": status})
+    emit_domain_event(
+        "session.updated",
+        source_kind="session",
+        source_id=session_id,
+        payload={"session_id": session_id, "cube_id": updated.get("cube_id"), "status": status, "project_path": updated.get("project_path")},
+    )
     if status in {"ended", "failed", "archived"}:
         add_session_event(
             session_id,
             SessionEventCreate(event_type="session_end", role="system", content=f"session {status}", created_at=now),
+        )
+        emit_domain_event(
+            "session.ended",
+            source_kind="session",
+            source_id=session_id,
+            payload={"session_id": session_id, "cube_id": updated.get("cube_id"), "status": status, "project_path": updated.get("project_path")},
         )
     return get_session(session_id)
 
@@ -190,6 +209,12 @@ def add_session_event(session_id: str, payload: SessionEventCreate) -> dict:
     session_events_repo().insert(row)
     agent_sessions_repo().touch(session_id, created_at)
     _upsert_session_event_vector(row, session)
+    emit_domain_event(
+        f"session_event.{event_type}",
+        source_kind="session_event",
+        source_id=event_id,
+        payload={"session_id": session_id, "event_id": event_id, "event_type": event_type, "cube_id": session.get("cube_id")},
+    )
     return row
 
 
@@ -273,6 +298,12 @@ def add_session_trace(session_id: str, payload: SessionTraceCreate) -> dict:
     }
     session_traces_repo().insert(row)
     agent_sessions_repo().touch(session_id, created_at)
+    emit_domain_event(
+        "session_trace.recorded",
+        source_kind="session_trace",
+        source_id=row["id"],
+        payload={"session_id": session_id, "trace_id": trace_id, "origin_function": payload.origin_function, "status": payload.status},
+    )
     add_session_event(
         session_id,
         SessionEventCreate(

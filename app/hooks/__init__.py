@@ -1,5 +1,6 @@
 ﻿from app.hooks.service import (
     create_hook_subscription,
+    emit_domain_event,
     emit_hook_event,
     list_hook_events,
     list_hook_subscriptions,
@@ -8,6 +9,7 @@
 
 __all__ = [
     "create_hook_subscription",
+    "emit_domain_event",
     "emit_hook_event",
     "list_hook_events",
     "list_hook_subscriptions",

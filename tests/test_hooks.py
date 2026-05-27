@@ -137,3 +137,45 @@ def test_hook_rest_and_mcp_surfaces(hook_env):
     assert gcd_list_hook_subscriptions(hook_name="session.ended")[0]["id"] == mcp_subscription["id"]
     assert gcd_list_hook_events(hook_name="session.ended")[0]["id"] == mcp_event["id"]
     assert mcp_dispatched["status"] == "dispatched"
+
+
+def test_memory_session_and_asset_operations_emit_hook_events(hook_env):
+    from app.assets.service import create_asset
+    from app.core.schemas import AssetCreate, MemoryCreate, SessionCreate
+    from app.hooks.service import create_hook_subscription, list_hook_events
+    from app.memory.service import add_memory
+    from app.sessions.service import create_session, update_session
+    from app.core.schemas import SessionUpdate
+
+    create_hook_subscription(HookSubscriptionCreate(hook_name="memory.created", target_ref="memory-worker"))
+    create_hook_subscription(HookSubscriptionCreate(hook_name="session.ended", target_ref="summary-worker"))
+    create_hook_subscription(HookSubscriptionCreate(hook_name="asset.created", target_ref="asset-worker"))
+
+    memory = add_memory(MemoryCreate(content="Hooked memory creation.", agent_id="codex", cube_id="cube-hook"))["memory"]
+    session = create_session(SessionCreate(source_agent="codex", project_path="S:/project", cube_id="cube-hook"))
+    update_session(session["id"], SessionUpdate(status="ended"))
+    asset = create_asset(
+        AssetCreate(
+            uri="file:///S:/project/hooked.txt",
+            asset_key="hooked-asset",
+            checksum="hook-checksum",
+            summary="Hooked asset.",
+            created_by="tester",
+            cube_id="cube-hook",
+        )
+    )
+
+    memory_event = list_hook_events(hook_name="memory.created", status="queued")[0]
+    session_event = list_hook_events(hook_name="session.ended", status="queued")[0]
+    asset_event = list_hook_events(hook_name="asset.created", status="queued")[0]
+
+    assert memory_event["source_kind"] == "memory"
+    assert memory_event["source_id"] == memory["id"]
+    assert memory_event["payload"]["memory_id"] == memory["id"]
+    assert memory_event["payload"]["cube_id"] == "cube-hook"
+    assert session_event["source_kind"] == "session"
+    assert session_event["source_id"] == session["id"]
+    assert session_event["payload"]["status"] == "ended"
+    assert asset_event["source_kind"] == "asset"
+    assert asset_event["source_id"] == asset["id"]
+    assert asset_event["payload"]["asset_key"] == "hooked-asset"

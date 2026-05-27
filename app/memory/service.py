@@ -16,6 +16,7 @@ from app.core.schemas import (
     ReaderItem,
 )
 from app.improvements.service import create_improvement_task
+from app.hooks.service import emit_domain_event
 from app.reader.service import read_text_fast, read_text_fine, reader_item_to_memory_candidate
 from app.retrieval.embedding import embed_text
 from app.storage.repo import (
@@ -205,7 +206,20 @@ def add_memory(payload: MemoryCreate) -> dict:
             }
         ]
     )
-    return {"memory_id": memory_id, "memory": memories_repo().get(memory_id), "status": "created"}
+    saved = memories_repo().get(memory_id)
+    emit_domain_event(
+        "memory.created",
+        source_kind="memory",
+        source_id=memory_id,
+        payload={
+            "memory_id": memory_id,
+            "cube_id": payload.cube_id,
+            "status": payload.status,
+            "source_kind": payload.source_kind,
+            "trust_level": payload.trust_level,
+        },
+    )
+    return {"memory_id": memory_id, "memory": saved, "status": "created"}
 
 
 def create_memory_candidate_from_reader(
@@ -356,6 +370,17 @@ def promote_memory_candidate(
         actor=reviewed_by or "memory_quality",
         metadata={"candidate_id": candidate["id"], "source_domain": candidate.get("source_domain")},
     )
+    emit_domain_event(
+        "memory_candidate.promoted",
+        source_kind="memory_candidate",
+        source_id=candidate["id"],
+        payload={
+            "candidate_id": candidate["id"],
+            "memory_id": memory_result["memory_id"],
+            "cube_id": candidate.get("cube_id"),
+            "status": status_on_memory,
+        },
+    )
     return {"candidate": updated_candidate, "memory_id": memory_result["memory_id"], "memory": memory_result["memory"]}
 
 
@@ -379,6 +404,12 @@ def add_memory_evidence(memory_id: str, payload: MemoryEvidenceCreate) -> dict:
     }
     memory_evidence_repo().insert(row)
     _audit("memory_evidence.created", memory_id, "memory_quality", {"evidence_id": evidence_id, "source_domain": payload.source_domain})
+    emit_domain_event(
+        "memory_evidence.created",
+        source_kind="memory",
+        source_id=memory_id,
+        payload={"memory_id": memory_id, "evidence_id": evidence_id, "source_domain": payload.source_domain, "source_id": payload.source_id},
+    )
     return row
 
 
@@ -421,6 +452,12 @@ def create_memory_promotion(payload: MemoryPromotionCreate) -> dict:
         }
     )
     _audit("memory_promotion.created", proposal_id, payload.created_by or "memory_quality", {"source_session_id": payload.source_session_id})
+    emit_domain_event(
+        "memory_promotion.created",
+        source_kind="memory_promotion",
+        source_id=proposal_id,
+        payload={"proposal_id": proposal_id, "source_session_id": payload.source_session_id, "cube_id": payload.cube_id},
+    )
     return row
 
 
@@ -656,6 +693,12 @@ def update_memory_promotion(proposal_id: str, payload: MemoryPromotionUpdate) ->
     }
     row = memory_promotion_proposals_repo().upsert(updated)
     _audit("memory_promotion.updated", proposal_id, payload.reviewed_by or "memory_quality", {"status": row["status"]})
+    emit_domain_event(
+        "memory_promotion.updated",
+        source_kind="memory_promotion",
+        source_id=proposal_id,
+        payload={"proposal_id": proposal_id, "status": row["status"], "promoted_memory_id": row.get("promoted_memory_id")},
+    )
     return row
 
 
@@ -721,6 +764,12 @@ def review_memory_promotion(proposal_id: str, payload: MemoryPromotionReview) ->
         to_status=memory["memory"].get("status", payload.status_on_memory),
         actor=payload.reviewed_by or "memory_quality",
         metadata={"promotion_proposal_id": proposal_id, "source_session_id": proposal.get("source_session_id")},
+    )
+    emit_domain_event(
+        "memory_promotion.promoted",
+        source_kind="memory_promotion",
+        source_id=proposal_id,
+        payload={"proposal_id": proposal_id, "memory_id": memory["memory_id"], "source_session_id": proposal.get("source_session_id")},
     )
     return {"proposal": promoted, "memory": memory}
 
@@ -809,6 +858,17 @@ def update_memory(memory_id: str, payload: MemoryUpdate) -> dict:
         metadata={"changed_fields": sorted(k for k, value in changes.items() if value is not None)},
     )
     _audit("memory.updated", memory_id, _actor(updated.get("agent_id"), updated.get("user_id")))
+    emit_domain_event(
+        "memory.updated",
+        source_kind="memory",
+        source_id=memory_id,
+        payload={
+            "memory_id": memory_id,
+            "cube_id": updated.get("cube_id"),
+            "status": updated.get("status"),
+            "changed_fields": sorted(k for k, value in changes.items() if value is not None),
+        },
+    )
     delete_item(memory_id)
     upsert_items(
         [
@@ -848,6 +908,12 @@ def delete_memory(memory_id: str) -> dict:
             actor=_actor(current.get("agent_id"), current.get("user_id")),
         )
         _audit("memory.deleted", memory_id, _actor(current.get("agent_id"), current.get("user_id")))
+        emit_domain_event(
+            "memory.deleted",
+            source_kind="memory",
+            source_id=memory_id,
+            payload={"memory_id": memory_id, "cube_id": current.get("cube_id"), "status": "deleted"},
+        )
     delete_item(memory_id)
     return {"deleted": existed, "memory_id": memory_id}
 

@@ -94,6 +94,26 @@ def emit_hook_event(payload: HookEventEmit) -> dict[str, Any]:
     )
 
 
+def emit_domain_event(
+    hook_name: str,
+    *,
+    source_kind: str,
+    source_id: str | None,
+    payload: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Record a domain hook event without executing subscriber code."""
+    return emit_hook_event(
+        HookEventEmit(
+            hook_name=hook_name,
+            source_kind=source_kind,
+            source_id=source_id,
+            payload=payload or {},
+            metadata={**(metadata or {}), "emitted_by": "domain_service"},
+        )
+    )
+
+
 def list_hook_events(
     hook_name: str | None = None,
     status: str | None = None,

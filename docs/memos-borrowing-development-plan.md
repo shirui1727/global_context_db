@@ -193,6 +193,7 @@ conflicted
 
 - `hook_subscriptions`：声明关注的 `hook_name`、`target_kind/target_ref`、状态和 metadata。
 - `hook_events`：事件只入队或记录 `no_subscriber`，由外部 worker 查询后处理。
+- Domain services now emit lifecycle events for memory, session, asset, artifact, analysis, and scan operations into the hook queue.
 - REST/MCP：创建订阅、发事件、列事件、标记 dispatched。
 - 安全边界：GCD 只记录/排队事件，不执行任意插件代码。
 
@@ -204,7 +205,7 @@ conflicted
 |---|---|---|
 | Reader fine mode LLM 抽取 | 确定性骨架已完成；真实 LLM 仍需要配置、成本、质量评估 | Scheduler + Feedback 稳定后 |
 | Redis Streams / consumer group | 当前 NAS 单机先用 SQLite 验证语义 | 多 worker 或并发压力出现后 |
-| Hook/plugin runtime | 先把 handler/component 边界稳定 | 第三方 worker/OpenClaw 插件扩展时 |
+| Complex plugin governance / marketplace | Current phase only needs event queues; GCD must not execute arbitrary plugin code | After hook queue is used by real workers |
 | Graph memory / subgraph | 现在先用 SQLite + LanceDB + evidence | lifecycle/feedback 数据积累后 |
 | Dashboard | 先保证服务层稳定 | Scheduler/Feedback/lifecycle 可视化需要时 |
 | Reranker / agentic search | 依赖更多模型和策略 | 基础 recall 质量瓶颈明确后 |
@@ -243,9 +244,10 @@ conflicted
 
 10. Feedback action proposal 非 LLM 骨架。
 11. Hook/plugin runtime 非重依赖骨架。
-12. LLM feedback action proposal。
-13. Redis scheduler。
-14. dashboard / graph memory。
+12. Hook runtime domain event emission.
+13. LLM feedback action proposal.
+14. Redis scheduler.
+15. dashboard / graph memory.
 
 ---
 

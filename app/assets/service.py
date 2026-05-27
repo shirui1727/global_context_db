@@ -16,6 +16,7 @@ from app.core.schemas import (
     FileReferenceUpdate,
 )
 from app.improvements.service import create_improvement_task
+from app.hooks.service import emit_domain_event
 from app.reader.service import read_asset_manifest_fast
 from app.retrieval.embedding import embed_text
 from app.storage.repo import (
@@ -409,6 +410,20 @@ def create_asset(payload: AssetCreate) -> dict:
             "version_changed": version_changed,
         },
     )
+    emit_domain_event(
+        "asset.updated" if existing else "asset.created",
+        source_kind="asset",
+        source_id=asset_id,
+        payload={
+            "asset_id": asset_id,
+            "asset_key": identity["asset_key"],
+            "cube_id": payload.cube_id,
+            "status": status,
+            "analysis_status": analysis_status,
+            "version_id": version["id"],
+            "version_changed": version_changed,
+        },
+    )
     if version_changed:
         _queue_improvement("reindex_asset", asset_id, "asset version changed", actor, {"version_id": version["id"]})
         _queue_improvement("refresh_asset_artifacts", asset_id, "asset artifacts became stale after version change", actor, {"version_id": version["id"]})
@@ -460,6 +475,19 @@ def update_asset(asset_id: str, payload: AssetUpdate) -> dict:
     _upsert_asset_vector(asset_id)
     actor = payload.updated_by or updated.get("source_kind") or "asset_writer"
     _audit("asset.status_changed" if status in {"deprecated", "archived"} else "asset.updated", asset_id, actor, {"changed_fields": sorted(changes)})
+    emit_domain_event(
+        "asset.status_changed" if status in {"deprecated", "archived"} else "asset.updated",
+        source_kind="asset",
+        source_id=asset_id,
+        payload={
+            "asset_id": asset_id,
+            "asset_key": updated.get("asset_key"),
+            "cube_id": updated.get("cube_id"),
+            "status": status,
+            "analysis_status": analysis_status,
+            "changed_fields": sorted(changes),
+        },
+    )
     return hydrate_asset(asset_id)
 
 
@@ -489,6 +517,12 @@ def register_asset_artifact(asset_id: str, payload: AssetArtifactCreate) -> dict
     }
     asset_artifacts_repo().upsert(row)
     _audit("asset_artifact.registered", asset_id, payload.generated_by or "artifact_writer", {"artifact_id": artifact_id, "artifact_kind": payload.artifact_kind})
+    emit_domain_event(
+        "asset_artifact.registered",
+        source_kind="asset_artifact",
+        source_id=artifact_id,
+        payload={"asset_id": asset_id, "artifact_id": artifact_id, "artifact_kind": payload.artifact_kind, "status": payload.status},
+    )
     return asset_artifacts_repo().get(artifact_id)
 
 
@@ -542,6 +576,19 @@ def register_asset_analysis_manifest(asset_id: str, payload: AssetAnalysisManife
         payload.generated_by or "asset_analysis",
         {"artifact_count": len(registered), "version_id": version_id},
     )
+    emit_domain_event(
+        "asset_analysis.registered",
+        source_kind="asset",
+        source_id=asset_id,
+        payload={
+            "asset_id": asset_id,
+            "asset_key": asset.get("asset_key"),
+            "cube_id": asset.get("cube_id"),
+            "artifact_count": len(registered),
+            "version_id": version_id,
+            "analysis_status": payload.analysis_status,
+        },
+    )
     if payload.analysis_status in {"failed", "needs_reindex"}:
         _queue_improvement(
             "reindex_asset",
@@ -587,6 +634,12 @@ def update_asset_artifact(artifact_id: str, payload: AssetArtifactUpdate) -> dic
     }
     asset_artifacts_repo().upsert(updated)
     _audit("asset_artifact.updated", updated["asset_id"], payload.generated_by or "artifact_writer", {"artifact_id": artifact_id, "changed_fields": sorted(changes)})
+    emit_domain_event(
+        "asset_artifact.updated",
+        source_kind="asset_artifact",
+        source_id=artifact_id,
+        payload={"asset_id": updated["asset_id"], "artifact_id": artifact_id, "status": status, "changed_fields": sorted(changes)},
+    )
     if status in {"stale", "failed", "pending"}:
         _queue_improvement(
             "refresh_asset_artifacts",
@@ -680,6 +733,19 @@ def run_asset_scan(payload: AssetScanRunCreate) -> dict:
     }
     asset_scan_runs_repo().upsert(row)
     _audit("asset_scan.completed", scan_id, actor, row["metadata"])
+    emit_domain_event(
+        "asset_scan.completed",
+        source_kind="asset_scan",
+        source_id=scan_id,
+        payload={
+            "scan_id": scan_id,
+            "scope_prefix": payload.scope_prefix,
+            "status": row["status"],
+            "observed_count": len(payload.observed),
+            "asset_ids": row["metadata"]["asset_ids"],
+            "missing_marked": missing_marked,
+        },
+    )
     return asset_scan_runs_repo().get(scan_id)
 
 
