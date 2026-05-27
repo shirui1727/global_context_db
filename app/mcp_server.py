@@ -26,6 +26,8 @@ from app.core.schemas import (
     IngestRequest,
     MemoryCreate,
     MemoryEvidenceCreate,
+    MemoryFeedbackActionCreate,
+    MemoryFeedbackCreate,
     MemoryPromotionCreate,
     MemoryPromotionReview,
     MemoryUpdate,
@@ -68,6 +70,13 @@ from app.scheduler.service import (
     scheduler_status,
 )
 from app.ingest.pipeline import ingest_text
+from app.memory.feedback_service import (
+    add_memory_feedback_action,
+    apply_memory_feedback,
+    create_memory_feedback,
+    list_memory_feedback,
+    list_memory_feedback_actions,
+)
 from app.memory.service import (
     add_memory,
     add_memory_evidence,
@@ -249,6 +258,82 @@ def gcd_list_memory_evidence(memory_id: str, limit: int = 50) -> list[dict[str, 
     """List evidence references for a memory."""
     bootstrap(settings)
     return list_memory_evidence(memory_id, limit)
+
+
+@mcp.tool()
+def gcd_memory_feedback(
+    feedback_text: str,
+    cube_id: str | None = None,
+    target_memory_id: str | None = None,
+    created_by: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Create a memory feedback record for manual review and apply."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return create_memory_feedback(
+        MemoryFeedbackCreate(
+            cube_id=cube_id,
+            feedback_text=feedback_text,
+            target_memory_id=target_memory_id,
+            created_by=created_by,
+            metadata=metadata or {},
+        )
+    )
+
+
+@mcp.tool()
+def gcd_list_memory_feedback(
+    limit: int = 100,
+    status: str | None = None,
+    target_memory_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """List memory feedback records."""
+    bootstrap(settings)
+    return list_memory_feedback(limit=limit, status=status, target_memory_id=target_memory_id)
+
+
+@mcp.tool()
+def gcd_add_memory_feedback_action(
+    feedback_id: str,
+    action_type: str,
+    target_memory_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Add a manual action to a memory feedback record."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return add_memory_feedback_action(
+        feedback_id,
+        MemoryFeedbackActionCreate(
+            action_type=action_type,
+            target_memory_id=target_memory_id,
+            payload=payload or {},
+            metadata=metadata or {},
+        ),
+    )
+
+
+@mcp.tool()
+def gcd_list_memory_feedback_actions(feedback_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    """List manual actions attached to a memory feedback record."""
+    bootstrap(settings)
+    return list_memory_feedback_actions(feedback_id, limit=limit)
+
+
+@mcp.tool()
+def gcd_apply_memory_feedback(
+    feedback_id: str,
+    actor: str = "memory_feedback",
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Apply pending manual actions for a memory feedback record."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return apply_memory_feedback(feedback_id, actor=actor)
 
 
 @mcp.tool()

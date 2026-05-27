@@ -228,6 +228,21 @@ class ForgetRequest(BaseModel):
     actor: str | None = None
 
 
+class MemoryFeedbackCreate(BaseModel):
+    cube_id: str | None = None
+    feedback_text: str
+    target_memory_id: str | None = None
+    created_by: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemoryFeedbackActionCreate(BaseModel):
+    action_type: str
+    target_memory_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class MemoryEvidenceCreate(BaseModel):
     source_domain: str
     source_id: str

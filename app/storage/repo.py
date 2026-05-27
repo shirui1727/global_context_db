@@ -102,6 +102,35 @@ def init_sqlite(path: Path) -> None:
     )
     conn.execute(
         """
+        create table if not exists memory_feedback (
+            id text primary key,
+            cube_id text,
+            feedback_text text,
+            target_memory_id text,
+            status text default 'pending',
+            created_by text,
+            created_at text,
+            updated_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists memory_feedback_actions (
+            id text primary key,
+            feedback_id text,
+            action_type text,
+            target_memory_id text,
+            payload text default '{}',
+            status text default 'pending',
+            applied_at text,
+            metadata text default '{}'
+        )
+        """
+    )
+    conn.execute(
+        """
         create table if not exists memory_promotion_proposals (
             id text primary key,
             source_session_id text,
@@ -591,6 +620,8 @@ def db_counts() -> dict[str, int]:
         "memories",
         "memory_versions",
         "memory_evidence",
+        "memory_feedback",
+        "memory_feedback_actions",
         "memory_promotion_proposals",
         "audit_logs",
         "captures",
@@ -2348,6 +2379,151 @@ class MemoryEvidenceRepo:
         }
 
 
+class MemoryFeedbackRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into memory_feedback(
+                    id, cube_id, feedback_text, target_memory_id, status, created_by, created_at, updated_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    cube_id=excluded.cube_id,
+                    feedback_text=excluded.feedback_text,
+                    target_memory_id=excluded.target_memory_id,
+                    status=excluded.status,
+                    updated_at=excluded.updated_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("cube_id"),
+                    row.get("feedback_text"),
+                    row.get("target_memory_id"),
+                    row.get("status") or "pending",
+                    row.get("created_by"),
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(row["id"])
+
+    def get(self, feedback_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, cube_id, feedback_text, target_memory_id, status, created_by, created_at, updated_at, metadata
+                from memory_feedback
+                where id = ?
+                """,
+                (feedback_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_recent(self, limit: int = 100, status: str | None = None, target_memory_id: str | None = None) -> list[dict]:
+        where = []
+        params: list[str | int] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if target_memory_id:
+            where.append("target_memory_id = ?")
+            params.append(target_memory_id)
+        query = """
+            select id, cube_id, feedback_text, target_memory_id, status, created_by, created_at, updated_at, metadata
+            from memory_feedback
+        """
+        if where:
+            query += " where " + " and ".join(where)
+        query += " order by created_at desc, rowid desc limit ?"
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "cube_id": row[1],
+            "feedback_text": row[2],
+            "target_memory_id": row[3],
+            "status": row[4] or "pending",
+            "created_by": row[5],
+            "created_at": row[6],
+            "updated_at": row[7],
+            "metadata": _json_loads(row[8], {}),
+        }
+
+
+class MemoryFeedbackActionsRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into memory_feedback_actions(
+                    id, feedback_id, action_type, target_memory_id, payload, status, applied_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    action_type=excluded.action_type,
+                    target_memory_id=excluded.target_memory_id,
+                    payload=excluded.payload,
+                    status=excluded.status,
+                    applied_at=excluded.applied_at,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("feedback_id"),
+                    row.get("action_type"),
+                    row.get("target_memory_id"),
+                    json.dumps(row.get("payload") or {}, ensure_ascii=False),
+                    row.get("status") or "pending",
+                    row.get("applied_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(row["id"])
+
+    def get(self, action_id: str) -> dict | None:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                select id, feedback_id, action_type, target_memory_id, payload, status, applied_at, metadata
+                from memory_feedback_actions
+                where id = ?
+                """,
+                (action_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def list_by_feedback(self, feedback_id: str, limit: int = 100) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select id, feedback_id, action_type, target_memory_id, payload, status, applied_at, metadata
+                from memory_feedback_actions
+                where feedback_id = ?
+                order by rowid asc
+                limit ?
+                """,
+                (feedback_id, limit),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "feedback_id": row[1],
+            "action_type": row[2],
+            "target_memory_id": row[3],
+            "payload": _json_loads(row[4], {}),
+            "status": row[5] or "pending",
+            "applied_at": row[6],
+            "metadata": _json_loads(row[7], {}),
+        }
+
+
 class MemoryPromotionProposalsRepo:
     def upsert(self, row: dict) -> dict:
         with _conn() as conn:
@@ -2845,6 +3021,14 @@ def memory_versions_repo() -> MemoryVersionsRepo:
 
 def memory_evidence_repo() -> MemoryEvidenceRepo:
     return MemoryEvidenceRepo()
+
+
+def memory_feedback_repo() -> MemoryFeedbackRepo:
+    return MemoryFeedbackRepo()
+
+
+def memory_feedback_actions_repo() -> MemoryFeedbackActionsRepo:
+    return MemoryFeedbackActionsRepo()
 
 
 def memory_promotion_proposals_repo() -> MemoryPromotionProposalsRepo:

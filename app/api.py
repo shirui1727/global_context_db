@@ -35,6 +35,8 @@ from app.core.schemas import (
     IngestRequest,
     MemoryCreate,
     MemoryEvidenceCreate,
+    MemoryFeedbackActionCreate,
+    MemoryFeedbackCreate,
     MemoryPromotionCreate,
     MemoryPromotionReview,
     MemoryPromotionUpdate,
@@ -88,6 +90,13 @@ from app.scheduler.service import (
     scheduler_status,
 )
 from app.ingest.pipeline import ingest_text
+from app.memory.feedback_service import (
+    add_memory_feedback_action,
+    apply_memory_feedback,
+    create_memory_feedback,
+    list_memory_feedback,
+    list_memory_feedback_actions,
+)
 from app.memory.service import (
     add_memory,
     add_memory_evidence,
@@ -778,6 +787,44 @@ def retrieval_eval(payload: RetrievalEvalRequest) -> dict:
 @router.post("/memories", dependencies=[Depends(require_api_key)])
 def memories(payload: MemoryCreate) -> dict:
     return add_memory(payload)
+
+
+@router.post("/memory-feedback", dependencies=[Depends(require_api_key)])
+def memory_feedback_create(payload: MemoryFeedbackCreate) -> dict:
+    return create_memory_feedback(payload)
+
+
+@router.get("/memory-feedback")
+def memory_feedback_list(
+    limit: int = 100,
+    status: str | None = None,
+    target_memory_id: str | None = None,
+) -> list[dict]:
+    return list_memory_feedback(limit=limit, status=status, target_memory_id=target_memory_id)
+
+
+@router.post("/memory-feedback/{feedback_id}/actions", dependencies=[Depends(require_api_key)])
+def memory_feedback_actions_create(feedback_id: str, payload: MemoryFeedbackActionCreate) -> dict:
+    try:
+        return add_memory_feedback_action(feedback_id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/memory-feedback/{feedback_id}/actions")
+def memory_feedback_actions_list(feedback_id: str, limit: int = 100) -> list[dict]:
+    try:
+        return list_memory_feedback_actions(feedback_id, limit=limit)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/memory-feedback/{feedback_id}/apply", dependencies=[Depends(require_api_key)])
+def memory_feedback_apply(feedback_id: str, actor: str = "memory_feedback") -> dict:
+    try:
+        return apply_memory_feedback(feedback_id, actor=actor)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/memory-promotions", dependencies=[Depends(require_api_key)])
