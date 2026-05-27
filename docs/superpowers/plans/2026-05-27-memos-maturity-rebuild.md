@@ -1,0 +1,573 @@
+# MemOS 成熟化重构实施计划
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 把 Global Context DB 从“能用的 NAS 记忆服务”重构成借鉴 MemOS 的成熟记忆系统：有 Cube 隔离/组合、Reader 入口、可恢复 Scheduler、Feedback 纠错、Runtime Components/Handlers，以及清晰生命周期。
+
+**Architecture:** 不把 MemOS 整包搬进来；按 Apache-2.0 允许范围学习并复刻成熟设计模式，优先实现与当前 NAS + SQLite + LanceDB + REST/MCP 架构兼容的最小成熟内核。先做本地可靠性（SQLite 状态机、手动 apply、组件拆分），再引入 Redis、LLM fine reader、graph/dashboard 等重依赖能力。
+
+**Tech Stack:** Python 3.12、FastAPI、MCP FastMCP、SQLite/WAL、LanceDB、pytest、PowerShell、GitHub。
+
+---
+
+## 0. 参考结论：哪些现在抄、哪些后面引入、哪些暂不做
+
+### 0.1 现在直接抄进当前重构主线
+
+| MemOS 成熟经验 | 当前项目落点 | 现在做的原因 | 抄法 |
+|---|---|---|---|
+| MemCube / Multi-Cube 隔离与组合 | `context_cubes`、`cube_bindings`、`cube_id/cube_ids` | 多 Agent/项目/用户共享记忆必须先有边界 | 已完成 v0.1；后续补 Cube 组合策略和默认 cube resolver |
+| MemReader fast/fine 分层 | `app/reader/service.py`、ReaderItem、ingest/session/asset 入口 | 所有输入先标准化，后面才能治理 | fast 已完成；下一步引入 reader candidates/lifecycle |
+| MemScheduler 的队列、优先级、状态跟踪、handler 模式 | `improvement_tasks` + `app/scheduler/service.py` | 当前 improvement queue 还不能可靠后台执行 | 先用 SQLite claim/retry/lease 复刻，不引 Redis |
+| Feedback & Correction 标准操作 | `memory_feedback`、`memory_feedback_actions`、manual apply | 成熟记忆系统必须能纠错、补证据、归档 | 先手动 actions，不上 LLM 自动规划 |
+| API handler 与 component init 拆分 | `app/runtime/*`、`app/handlers/*` | 当前 `api.py/mcp_server.py/repo.py` 已变大，继续堆会失控 | 先抽 RuntimeComponents 和 handler，保持 REST/MCP 兼容 |
+| Memory metadata: source、version、history、status | `memory_versions`、`memory_evidence`、lifecycle events | 解决“记忆从哪来、改过什么、能不能信” | 增量扩展，不破坏现有 memories 表 |
+
+### 0.2 后面再引入
+
+| MemOS 能力 | 延后原因 | 触发条件 |
+|---|---|---|
+| Reader fine mode / hallucination filter / evidence quote LLM 抽取 | 需要稳定 LLM 配置和成本控制 | Scheduler + Feedback 稳定后 |
+| Redis Streams / consumer group / distributed scheduler | 当前 NAS 单机优先，SQLite 足够验证语义 | 多 worker 并发或远程负载上来后 |
+| Hook/plugin runtime | 现在先把 handler 边界抽清楚 | 第三方 worker、OpenClaw 插件、NAS 扩展需要接入时 |
+| Graph memory / subgraph dashboard | 当前 SQLite + LanceDB 已能服务检索 | memory lifecycle 和 feedback 数据足够后 |
+| Reranker / agentic search / deep search | 会增加复杂依赖 | 基础 recall 质量瓶颈明确后 |
+| User manager / enterprise ACL | 当前是个人/NAS 工具链 | 多真实用户共享并需要权限隔离时 |
+
+### 0.3 暂时不要抄
+
+- Parametric Memory、LoRA、model adaptation。
+- Activation Memory / KV cache。
+- 云 dashboard、多租户计费、企业权限大平台。
+- 把 OCR/ASR/ffmpeg/PDF 深解析塞进主服务；继续用 external worker 产 manifest，GCD 只注册和检索。
+- 直接替换成 MemOS 原项目运行时；当前项目要保持 NAS-first、REST/MCP-first。
+
+---
+
+## 1. 当前状态
+
+已完成并推送：
+
+- `b6d7276 feat: add context cubes for scoped memory`
+  - `app/cubes/service.py`
+  - `context_cubes` / `cube_bindings`
+  - memories/assets/sessions/improvement/promotions 支持 `cube_id`
+  - search/recall 支持 `cube_id` / `cube_ids`
+  - REST/MCP cube 工具
+- `5826d8e feat: add reader fast mode pipeline`
+  - `ReaderItem`
+  - `read_text_fast()` / `read_session_event_fast()` / `read_asset_manifest_fast()` / `read_tool_trace_fast()`
+  - memory/document/session/asset/control 入口写 reader metadata
+
+下一步从 Phase 3 开始，按 TDD 做 SQLite Scheduler。
+
+---
+
+## Task 1: SQLite Scheduler schema + repo
+
+**Files:**
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\core\schemas.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_scheduler.py`
+
+- [ ] **Step 1: 写失败测试：pending task 可 claim，且字段不丢失**
+
+```python
+def test_scheduler_claims_pending_task_with_cube_and_queue(tmp_path, monkeypatch):
+    from app.core.config import settings
+    from app.storage.bootstrap import bootstrap
+    from app.core.schemas import ImprovementTaskCreate
+    from app.improvements.service import create_improvement_task
+    from app.scheduler.service import claim_next_task
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "sqlite_path", tmp_path / "context.db")
+    bootstrap(settings)
+
+    task = create_improvement_task(ImprovementTaskCreate(
+        task_kind="reindex_asset",
+        target_domain="asset",
+        target_id="asset-1",
+        cube_id="cube-a",
+        priority=10,
+        metadata={"queue_name": "asset"},
+    ))
+
+    claimed = claim_next_task(queue_name="asset", worker_id="worker-1", lease_seconds=60)
+
+    assert claimed is not None
+    assert claimed["id"] == task["id"]
+    assert claimed["cube_id"] == "cube-a"
+    assert claimed["queue_name"] == "asset"
+    assert claimed["worker_id"] == "worker-1"
+    assert claimed["status"] == "running"
+    assert claimed["claimed_until"]
+```
+
+- [ ] **Step 2: 运行测试确认失败**
+
+```powershell
+python -m pytest tests\test_scheduler.py::test_scheduler_claims_pending_task_with_cube_and_queue -q
+```
+
+Expected: FAIL，提示 `app.scheduler` 不存在或字段不存在。
+
+- [ ] **Step 3: 扩展 schema**
+
+在 `ImprovementTaskCreate` 增加：
+
+```python
+queue_name: str = "default"
+max_retries: int = Field(default=3, ge=0, le=20)
+next_run_at: str | None = None
+```
+
+在 `ImprovementTaskUpdate` 增加：
+
+```python
+retry_count: int | None = Field(default=None, ge=0, le=100)
+max_retries: int | None = Field(default=None, ge=0, le=100)
+next_run_at: str | None = None
+claimed_at: str | None = None
+claimed_until: str | None = None
+worker_id: str | None = None
+queue_name: str | None = None
+last_error: str | None = None
+```
+
+- [ ] **Step 4: 扩展 `improvement_tasks` 表和自愈列**
+
+在 create table 增加：
+
+```sql
+retry_count integer default 0,
+max_retries integer default 3,
+next_run_at text,
+claimed_at text,
+claimed_until text,
+worker_id text,
+queue_name text default 'default',
+last_error text
+```
+
+在 `_ensure_columns(conn, "improvement_tasks", ...)` 加同名列。
+
+- [ ] **Step 5: 更新 `ImprovementTasksRepo`**
+
+更新 `upsert/get/update/list_recent/_decode` 的字段顺序，确保返回 dict 包含：
+
+```python
+"retry_count", "max_retries", "next_run_at", "claimed_at",
+"claimed_until", "worker_id", "queue_name", "last_error"
+```
+
+保留旧字段 `claimed_by` / `error_message` 作为兼容别名，不删除。
+
+- [ ] **Step 6: 运行当前测试**
+
+```powershell
+python -m pytest tests\test_scheduler.py::test_scheduler_claims_pending_task_with_cube_and_queue -q
+```
+
+Expected: FAIL 只剩 `claim_next_task` 未实现。
+
+---
+
+## Task 2: Scheduler service 状态机
+
+**Files:**
+- Create: `S:\项目开发\全局数据库\global_context_db\app\scheduler\__init__.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\scheduler\service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_scheduler.py`
+
+- [ ] **Step 1: 写状态机测试**
+
+追加测试：
+
+```python
+def test_scheduler_prevents_double_claim(tmp_path, monkeypatch):
+    # create one pending task, claim by worker-1, worker-2 gets None
+    ...
+
+def test_scheduler_releases_expired_claim(tmp_path, monkeypatch):
+    # claim with lease_seconds=-1, release_expired_claims returns 1, then worker-2 can claim
+    ...
+
+def test_scheduler_retries_failed_until_max_retries(tmp_path, monkeypatch):
+    # fail task twice with max_retries=2; first retry returns pending, second remains failed
+    ...
+```
+
+不要跳过；用真实 repo + SQLite 临时目录。
+
+- [ ] **Step 2: 在 repo 增加原子 claim 方法**
+
+新增 `ImprovementTasksRepo.claim_next(queue_name, worker_id, now, claimed_until)`：
+
+```sql
+select id from improvement_tasks
+where status = 'pending'
+  and coalesce(queue_name, 'default') = ?
+  and (next_run_at is null or next_run_at <= ?)
+order by priority asc, created_at asc, rowid asc
+limit 1
+```
+
+随后同一连接内 update：
+
+```sql
+update improvement_tasks
+set status='running', worker_id=?, claimed_by=?, claimed_at=?, claimed_until=?, updated_at=?
+where id=? and status='pending'
+```
+
+- [ ] **Step 3: 实现 `app/scheduler/service.py`**
+
+必须提供：
+
+```python
+claim_next_task(queue_name: str = "default", worker_id: str = "local", lease_seconds: int = 300) -> dict | None
+complete_task(task_id: str, result: dict | None = None) -> dict
+fail_task(task_id: str, error: str, retry_delay_seconds: int = 60) -> dict
+release_expired_claims(now: str | None = None) -> int
+retry_failed_tasks(now: str | None = None) -> int
+run_pending_tasks(limit: int = 10, queue_name: str = "default", worker_id: str = "local") -> dict
+```
+
+状态规则：
+
+```text
+pending -> running -> done
+pending -> running -> failed
+running + claimed_until < now -> pending
+failed + retry_count < max_retries + next_run_at <= now -> pending
+failed + retry_count >= max_retries -> failed
+```
+
+- [ ] **Step 4: 运行 scheduler 测试**
+
+```powershell
+python -m pytest tests\test_scheduler.py -q
+```
+
+Expected: PASS。
+
+---
+
+## Task 3: Scheduler executor + REST/MCP 接入
+
+**Files:**
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\improvements\service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\api.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\mcp_server.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_scheduler.py`
+
+- [ ] **Step 1: 让 `run_pending_tasks()` 调用现有 deterministic executor**
+
+把 `_execute_task(task, payload)` 抽成可复用函数：
+
+```python
+def execute_improvement_task(task: dict, *, actor: str = "scheduler", clean_legacy: bool = True) -> dict:
+    payload = ImproveRequest(
+        task_kind=task["task_kind"],
+        target_domain=task["target_domain"],
+        target_id=task["target_id"],
+        cube_id=task.get("cube_id"),
+        execute=True,
+        clean_legacy=clean_legacy,
+        created_by=actor,
+        metadata=task.get("metadata", {}),
+    )
+    return _execute_task(task, payload)
+```
+
+- [ ] **Step 2: 写执行测试**
+
+```python
+def test_scheduler_run_pending_tasks_executes_known_task(tmp_path, monkeypatch):
+    # monkeypatch app.improvements.service.execute_improvement_task to return {"ok": True}
+    # assert run_pending_tasks(limit=1)["done"] == 1
+```
+
+- [ ] **Step 3: REST endpoints**
+
+新增：
+
+```text
+POST /scheduler/claim
+POST /scheduler/run-pending
+POST /scheduler/release-expired
+GET  /scheduler/status
+```
+
+返回不要暴露内部异常堆栈，400 用 `HTTPException`。
+
+- [ ] **Step 4: MCP tools**
+
+新增：
+
+```text
+gcd_scheduler_claim_next
+gcd_scheduler_run_pending
+gcd_scheduler_release_expired
+gcd_scheduler_status
+```
+
+- [ ] **Step 5: 验证**
+
+```powershell
+python -m pytest tests\test_scheduler.py -q
+python -m pytest -q
+python -m compileall app tools
+```
+
+Expected: 全部 PASS。
+
+- [ ] **Step 6: 提交推送**
+
+```powershell
+git add app\core\schemas.py app\storage\repo.py app\scheduler app\improvements\service.py app\api.py app\mcp_server.py tests\test_scheduler.py
+git commit -m "feat: add sqlite scheduler state machine"
+git push
+```
+
+---
+
+## Task 4: Memory Feedback 基础表 + 手动 apply
+
+**Files:**
+- Create: `S:\项目开发\全局数据库\global_context_db\app\memory\feedback_service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\core\schemas.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\api.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\mcp_server.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_memory_feedback.py`
+
+- [ ] **Step 1: 写 apply 测试**
+
+覆盖：
+
+```python
+def test_feedback_update_memory_action_applies_and_versions(tmp_path, monkeypatch): ...
+def test_feedback_archive_memory_action_applies(tmp_path, monkeypatch): ...
+def test_feedback_add_evidence_action_applies(tmp_path, monkeypatch): ...
+def test_feedback_create_memory_action_applies(tmp_path, monkeypatch): ...
+```
+
+- [ ] **Step 2: schema**
+
+新增：
+
+```python
+class MemoryFeedbackCreate(BaseModel):
+    cube_id: str | None = None
+    feedback_text: str
+    target_memory_id: str | None = None
+    created_by: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class MemoryFeedbackActionCreate(BaseModel):
+    action_type: str
+    target_memory_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+```
+
+- [ ] **Step 3: repo tables**
+
+新增：
+
+```sql
+memory_feedback(id, cube_id, feedback_text, target_memory_id, status, created_by, created_at, updated_at, metadata)
+memory_feedback_actions(id, feedback_id, action_type, target_memory_id, payload, status, applied_at, metadata)
+```
+
+- [ ] **Step 4: service apply**
+
+支持 action：
+
+```text
+update         -> update_memory()
+archive        -> update_memory(status='archived')
+add_evidence   -> add_memory_evidence()
+create_memory  -> add_memory()
+reject         -> feedback/action 标记 rejected
+```
+
+每次 apply 写 audit log，action 幂等：已 `applied` 再 apply 不重复执行。
+
+- [ ] **Step 5: REST/MCP**
+
+```text
+POST /memory-feedback
+GET  /memory-feedback
+POST /memory-feedback/{feedback_id}/actions
+POST /memory-feedback/{feedback_id}/apply
+
+gcd_memory_feedback
+gcd_list_memory_feedback
+gcd_apply_memory_feedback
+```
+
+- [ ] **Step 6: 验证提交**
+
+```powershell
+python -m pytest tests\test_memory_feedback.py -q
+python -m pytest -q
+python -m compileall app tools
+git add app tests
+git commit -m "feat: add manual memory feedback actions"
+git push
+```
+
+---
+
+## Task 5: RuntimeComponents + Handlers 拆分
+
+**Files:**
+- Create: `S:\项目开发\全局数据库\global_context_db\app\runtime\__init__.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\runtime\components.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\handlers\memory_handler.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\handlers\asset_handler.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\handlers\session_handler.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\handlers\cube_handler.py`
+- Create: `S:\项目开发\全局数据库\global_context_db\app\handlers\scheduler_handler.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_runtime_components.py`
+
+- [ ] **Step 1: 写 component 初始化测试**
+
+```python
+def test_runtime_components_bootstrap_is_idempotent(tmp_path, monkeypatch):
+    from app.core.config import settings
+    from app.runtime.components import get_runtime_components
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "sqlite_path", tmp_path / "context.db")
+
+    first = get_runtime_components(settings)
+    second = get_runtime_components(settings)
+
+    assert first.settings is settings
+    assert second.settings is settings
+    assert first.sqlite_path == settings.sqlite_path
+```
+
+- [ ] **Step 2: 实现 RuntimeComponents**
+
+```python
+@dataclass(frozen=True)
+class RuntimeComponents:
+    settings: Settings
+    sqlite_path: Path
+    data_dir: Path
+
+
+def get_runtime_components(settings: Settings = settings) -> RuntimeComponents:
+    bootstrap(settings)
+    return RuntimeComponents(settings=settings, sqlite_path=settings.sqlite_path, data_dir=settings.data_dir)
+```
+
+先别把所有 service 塞进 dataclass；保持轻量，避免大爆改。
+
+- [ ] **Step 3: 抽 handler 薄封装**
+
+每个 handler 只做：
+
+```text
+validate request -> call service -> normalize error/response
+```
+
+不要在 handler 里写 repo SQL 或业务算法。
+
+- [ ] **Step 4: 逐步改 API/MCP 调 handler**
+
+先迁移新增的 scheduler/feedback/cube，再迁移 memory/session/asset。每迁一组跑相关测试。
+
+- [ ] **Step 5: 验证提交**
+
+```powershell
+python -m pytest -q
+python -m compileall app tools
+git add app tests
+git commit -m "refactor: introduce runtime components and handlers"
+git push
+```
+
+---
+
+## Task 6: Lifecycle events + reader candidates
+
+**Files:**
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\reader\service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\memory\service.py`
+- Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
+- Test: `S:\项目开发\全局数据库\global_context_db\tests\test_memory_lifecycle.py`
+
+- [ ] **Step 1: 新增 lifecycle 表**
+
+```sql
+memory_lifecycle_events(
+  id text primary key,
+  memory_id text,
+  from_status text,
+  to_status text,
+  event_kind text,
+  actor text,
+  created_at text,
+  metadata text default '{}'
+)
+```
+
+- [ ] **Step 2: ReaderItem -> candidate**
+
+新增 `memory_candidates`：保存 reader 输出但尚未确认的记忆候选。
+
+状态：
+
+```text
+candidate -> active -> verified -> stale -> archived/deleted/conflicted
+```
+
+- [ ] **Step 3: 迁移 promotion/quality report 使用 lifecycle**
+
+promotion 成功后写 `promoted` 事件；update 写 `corrected`；archive 写 `archived`。
+
+- [ ] **Step 4: 验证提交**
+
+```powershell
+python -m pytest tests\test_memory_lifecycle.py -q
+python -m pytest -q
+python -m compileall app tools
+git add app tests
+git commit -m "feat: add memory lifecycle events"
+git push
+```
+
+---
+
+## 7. 每阶段验收门槛
+
+每个阶段完成前必须跑：
+
+```powershell
+python -m pytest -q
+python -m compileall app tools
+git status --short
+```
+
+如果只是文档改动，可至少跑：
+
+```powershell
+python -c "from pathlib import Path; [p.read_text(encoding='utf-8') for p in Path('docs').rglob('*.md')]"
+git diff --check
+```
+
+---
+
+## 8. 后续阶段触发条件
+
+- Scheduler SQLite 连续通过本地和 NAS 运行验证后，再做 Redis Streams。
+- Feedback 手动 apply 被实际使用后，再加 LLM action proposal。
+- Handler 边界稳定后，再做 Hook/plugin runtime。
+- 记忆纠错/版本数据积累后，再做 graph/dashboard。
