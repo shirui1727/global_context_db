@@ -251,3 +251,32 @@ def test_cube_snapshot_export_import_round_trip(cube_env, tmp_path):
             setattr(settings, key, value)
         reset_bootstrap()
         bootstrap(settings)
+
+
+def test_writable_cube_ids_fan_out_memory_writes(cube_env):
+    from app.core.schemas import MemoryCreate
+    from app.cubes.service import create_cube
+    from app.memory.service import add_memory, list_memories
+
+    project = create_cube(ContextCubeCreate(name="Writable Project", cube_type="project", owner_id="project:writable"))
+    shared = create_cube(ContextCubeCreate(name="Writable Shared", cube_type="shared", owner_id="team", visibility="shared"))
+
+    result = add_memory(
+        MemoryCreate(
+            content="Writable cube fan-out stores this memory in project and shared cubes.",
+            writable_cube_ids=[project["id"], shared["id"]],
+            agent_id="codex",
+            tags=["fanout"],
+        )
+    )
+    memories = list_memories(limit=20)
+    by_cube = {memory["cube_id"]: memory for memory in memories}
+
+    assert result["status"] == "created"
+    assert result["write_scope"]["writable_cube_ids"] == [project["id"], shared["id"]]
+    assert result["write_scope"]["created_count"] == 2
+    assert project["id"] in by_cube
+    assert shared["id"] in by_cube
+    assert by_cube[project["id"]]["content"] == "Writable cube fan-out stores this memory in project and shared cubes."
+    assert by_cube[shared["id"]]["content"] == "Writable cube fan-out stores this memory in project and shared cubes."
+    assert by_cube[project["id"]]["id"] != by_cube[shared["id"]]["id"]

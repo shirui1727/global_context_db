@@ -337,6 +337,7 @@ class MemoryPromotionReview(BaseModel):
 class MemoryCreate(BaseModel):
     content: str
     cube_id: str | None = None
+    writable_cube_ids: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     user_id: str = "default"
     agent_id: str | None = None

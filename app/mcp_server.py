@@ -157,6 +157,7 @@ def gcd_health() -> dict[str, Any]:
 def gcd_add_memory(
     content: str,
     cube_id: str | None = None,
+    writable_cube_ids: list[str] | None = None,
     user_id: str = "default",
     tags: list[str] | None = None,
     agent_id: str | None = None,
@@ -177,6 +178,7 @@ def gcd_add_memory(
         MemoryCreate(
             content=content,
             cube_id=cube_id,
+            writable_cube_ids=writable_cube_ids or [],
             tags=tags or [],
             user_id=user_id,
             agent_id=agent_id,

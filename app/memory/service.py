@@ -116,6 +116,34 @@ def _update_event_kind(current: dict, updated: dict, changes: dict) -> str:
 
 
 def add_memory(payload: MemoryCreate) -> dict:
+    writable_cube_ids = _unique_tags(payload.writable_cube_ids)
+    if writable_cube_ids:
+        results = []
+        for writable_cube_id in writable_cube_ids:
+            scoped_payload = payload.model_copy(update={"cube_id": writable_cube_id, "writable_cube_ids": []})
+            results.append(add_memory(scoped_payload))
+        created_count = sum(1 for result in results if result.get("status") == "created")
+        deduplicated_count = sum(1 for result in results if result.get("status") == "deduplicated")
+        primary = results[0] if results else {}
+        return {
+            **primary,
+            "status": "created" if created_count else primary.get("status", "deduplicated"),
+            "memories": [result.get("memory") for result in results if result.get("memory")],
+            "write_scope": {
+                "writable_cube_ids": writable_cube_ids,
+                "created_count": created_count,
+                "deduplicated_count": deduplicated_count,
+                "results": [
+                    {
+                        "cube_id": (result.get("memory") or {}).get("cube_id"),
+                        "memory_id": result.get("memory_id"),
+                        "status": result.get("status"),
+                    }
+                    for result in results
+                ],
+            },
+        }
+
     now = datetime.now(timezone.utc).isoformat()
     cube_id = resolve_default_cube(
         cube_id=payload.cube_id,
@@ -127,6 +155,7 @@ def add_memory(payload: MemoryCreate) -> dict:
     memory_id = sha256(
         "|".join(
             [
+                cube_id or "",
                 payload.user_id,
                 payload.agent_id or "",
                 payload.session_id or "",

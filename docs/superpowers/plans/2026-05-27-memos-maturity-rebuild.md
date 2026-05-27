@@ -984,3 +984,33 @@ git add app tests docs
 git commit -m "feat: add cube snapshot import export"
 git push
 ```
+
+
+---
+
+## Task 16: Writable cube fan-out
+
+Goal: borrow MemOS `writable_cube_ids` semantics so writes can target one or more explicit cubes while reads keep using readable cube scope.
+
+- [x] RED test: `MemoryCreate(writable_cube_ids=[project, shared])` creates one memory per writable cube and returns write-scope metadata.
+- [x] Add `writable_cube_ids` to `MemoryCreate` while keeping `cube_id` backward-compatible.
+- [x] Make `add_memory()` fan out to each writable cube with cube-scoped deterministic IDs.
+- [x] Expose `writable_cube_ids` on MCP `gcd_add_memory`; REST already accepts the schema field.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_cubes.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+Commit:
+
+```powershell
+git add app tests docs
+git commit -m "feat: add writable cube fan out"
+git push
+```
