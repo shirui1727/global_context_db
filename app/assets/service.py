@@ -16,6 +16,7 @@ from app.core.schemas import (
     FileReferenceUpdate,
 )
 from app.improvements.service import create_improvement_task
+from app.reader.service import read_asset_manifest_fast
 from app.retrieval.embedding import embed_text
 from app.storage.repo import (
     asset_artifacts_repo,
@@ -189,7 +190,19 @@ def _upsert_asset_vector(asset_id: str) -> None:
     if asset["status"] == "archived":
         delete_item(asset_id)
         return
-    text = _search_text(asset, primary_location, current_version)
+    reader_item = read_asset_manifest_fast(
+        asset_id=asset_id,
+        asset_key=asset.get("asset_key"),
+        summary=asset.get("summary") or "",
+        uri=primary_location.get("uri") if primary_location else None,
+        cube_id=asset.get("cube_id"),
+        tags=asset.get("tags", []),
+        title=asset.get("title"),
+        asset_kind=asset.get("asset_kind"),
+        media_type=asset.get("media_type"),
+        metadata={"analysis_status": asset.get("analysis_status")},
+    )
+    text = reader_item.content or _search_text(asset, primary_location, current_version)
     if not text.strip():
         delete_item(asset_id)
         return
@@ -198,13 +211,13 @@ def _upsert_asset_vector(asset_id: str) -> None:
             {
                 "id": asset_id,
                 "kind": "asset",
-                "text": text,
-                "vector": embed_text(text).tolist(),
+                "text": reader_item.content,
+                "vector": embed_text(reader_item.content).tolist(),
                 "cube_id": asset.get("cube_id"),
                 "source": primary_location.get("uri") if primary_location else "",
                 "doc_id": asset_id,
                 "chunk_index": 0,
-                "tags": asset.get("tags", []),
+                "tags": reader_item.tags,
                 "context_domain": "asset",
                 "status": asset.get("status"),
                 "source_kind": asset.get("source_kind"),
@@ -223,6 +236,12 @@ def _upsert_asset_vector(asset_id: str) -> None:
                     "analysis_status": asset.get("analysis_status"),
                     "version_id": current_version.get("id") if current_version else None,
                     "location_status": primary_location.get("location_status") if primary_location else None,
+                    "reader": {
+                        "source_domain": reader_item.source_domain,
+                        "source_id": reader_item.source_id,
+                        "content_kind": reader_item.content_kind,
+                        "provenance": reader_item.provenance,
+                    },
                 },
             }
         ]
@@ -232,14 +251,28 @@ def _upsert_asset_vector(asset_id: str) -> None:
 def _upsert_artifact_text_vector(asset: dict, artifact: dict, text: str) -> None:
     if not text.strip():
         return
+    reader_item = read_asset_manifest_fast(
+        asset_id=asset["id"],
+        asset_key=asset.get("asset_key"),
+        summary=asset.get("summary") or "",
+        uri=artifact.get("artifact_uri"),
+        cube_id=asset.get("cube_id"),
+        tags=asset.get("tags", []),
+        title=asset.get("title"),
+        asset_kind=asset.get("asset_kind"),
+        media_type=asset.get("media_type"),
+        artifact_text=text,
+        artifact_id=artifact["id"],
+        metadata={"artifact_kind": artifact.get("artifact_kind")},
+    )
     vector_id = _hash(f"artifact-vector:{artifact['id']}")
     upsert_items(
         [
             {
                 "id": vector_id,
                 "kind": "asset_artifact",
-                "text": text,
-                "vector": embed_text(text).tolist(),
+                "text": reader_item.content,
+                "vector": embed_text(reader_item.content).tolist(),
                 "cube_id": asset.get("cube_id"),
                 "source": artifact.get("artifact_uri") or "",
                 "doc_id": asset["id"],
@@ -262,6 +295,12 @@ def _upsert_artifact_text_vector(asset: dict, artifact: dict, text: str) -> None
                     "artifact_id": artifact["id"],
                     "artifact_kind": artifact.get("artifact_kind"),
                     "artifact_uri": artifact.get("artifact_uri"),
+                    "reader": {
+                        "source_domain": reader_item.source_domain,
+                        "source_id": reader_item.source_id,
+                        "content_kind": reader_item.content_kind,
+                        "provenance": reader_item.provenance,
+                    },
                 },
             }
         ]

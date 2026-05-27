@@ -12,6 +12,7 @@ from app.core.schemas import (
     SessionUpdate,
 )
 from app.memory.service import search_memory
+from app.reader.service import read_session_event_fast, read_tool_trace_fast
 from app.retrieval.service import search_context
 from app.storage.repo import (
     agent_sessions_repo,
@@ -193,15 +194,18 @@ def add_session_event(session_id: str, payload: SessionEventCreate) -> dict:
 
 
 def _upsert_session_event_vector(row: dict, session: dict) -> None:
-    text_parts = [
-        row.get("event_type") or "",
-        row.get("role") or "",
-        row.get("content") or "",
-        row.get("tool_name") or "",
-        row.get("tool_result") or "",
-        session.get("project_path") or "",
-    ]
-    text = "\n".join(part for part in text_parts if part)
+    reader_item = read_session_event_fast(
+        session_id=session["id"],
+        event_id=row["id"],
+        event_type=row.get("event_type") or "system",
+        role=row.get("role"),
+        content=row.get("content") or "",
+        tool_name=row.get("tool_name"),
+        tool_result=row.get("tool_result"),
+        cube_id=session.get("cube_id"),
+        metadata={"project_path": session.get("project_path"), "source_agent": session.get("source_agent")},
+    )
+    text = reader_item.content + (f"\n{session.get('project_path')}" if session.get("project_path") else "")
     if not text.strip():
         return
     upsert_items(
@@ -215,7 +219,7 @@ def _upsert_session_event_vector(row: dict, session: dict) -> None:
                 "source": session.get("project_path") or "",
                 "doc_id": session["id"],
                 "chunk_index": 0,
-                "tags": [row.get("event_type") or "session"],
+                "tags": reader_item.tags,
                 "session_id": session["id"],
                 "context_domain": "session",
                 "status": session.get("status") or "running",
@@ -228,6 +232,12 @@ def _upsert_session_event_vector(row: dict, session: dict) -> None:
                     "event_type": row.get("event_type"),
                     "project_path": session.get("project_path"),
                     "source_agent": session.get("source_agent"),
+                    "reader": {
+                        "source_domain": reader_item.source_domain,
+                        "source_id": reader_item.source_id,
+                        "content_kind": reader_item.content_kind,
+                        "provenance": reader_item.provenance,
+                    },
                 },
             }
         ]

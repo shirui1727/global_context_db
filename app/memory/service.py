@@ -14,6 +14,7 @@ from app.core.schemas import (
     MemoryUpdate,
 )
 from app.improvements.service import create_improvement_task
+from app.reader.service import read_text_fast
 from app.retrieval.embedding import embed_text
 from app.storage.repo import (
     audit_logs_repo,
@@ -79,6 +80,20 @@ def add_memory(payload: MemoryCreate) -> dict:
             ]
         ).encode("utf-8")
     ).hexdigest()
+    reader_item = read_text_fast(
+        source=payload.source_kind,
+        text=payload.content,
+        cube_id=payload.cube_id,
+        tags=payload.tags,
+        metadata={**payload.metadata, "source_domain": "memory"},
+    )
+    reader_metadata = {
+        "source_domain": "memory",
+        "source_id": memory_id,
+        "content_kind": reader_item.content_kind,
+        "provenance": {**reader_item.provenance, "source_domain": "memory", "source_id": memory_id},
+    }
+    metadata = {**payload.metadata, "reader": reader_metadata}
     row = {
         "id": memory_id,
         "content": payload.content,
@@ -93,7 +108,7 @@ def add_memory(payload: MemoryCreate) -> dict:
         "status": payload.status,
         "source_kind": payload.source_kind,
         "trust_level": payload.trust_level,
-        "metadata": payload.metadata,
+        "metadata": metadata,
         "created_at": now,
         "updated_at": now,
     }
@@ -129,7 +144,7 @@ def add_memory(payload: MemoryCreate) -> dict:
                 "status": payload.status,
                 "source_kind": payload.source_kind,
                 "trust_level": payload.trust_level,
-                "metadata": payload.metadata,
+                "metadata": metadata,
             }
         ]
     )

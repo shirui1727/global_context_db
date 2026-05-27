@@ -6,6 +6,9 @@ from pydantic import BaseModel, Field
 class IngestRequest(BaseModel):
     source: str = "manual"
     text: str
+    cube_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class SearchRequest(BaseModel):
@@ -55,6 +58,18 @@ class ContextCubeBindingCreate(BaseModel):
     target_domain: str
     target_id: str
     binding_kind: str = "owns"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReaderItem(BaseModel):
+    source_domain: str
+    source_id: str
+    cube_id: str | None = None
+    content: str
+    content_kind: str = "note"
+    tags: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    provenance: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

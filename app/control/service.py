@@ -39,9 +39,21 @@ def remember(payload: RememberRequest) -> dict:
             ),
         }
     if content_type == "document":
-        return {"content_type": content_type, "result": ingest_text(IngestRequest(source=payload.source, text=payload.content))}
+        return {
+            "content_type": content_type,
+            "result": ingest_text(
+                IngestRequest(
+                    source=payload.source,
+                    text=payload.content,
+                    cube_id=payload.cube_id,
+                    tags=payload.tags,
+                    metadata={**payload.metadata, "project_path": payload.project_path},
+                )
+            ),
+        }
     if content_type == "asset":
-        asset_payload = payload.asset or {}
+        asset_payload = {**(payload.asset or {})}
+        asset_payload.setdefault("cube_id", payload.cube_id)
         return {
             "content_type": content_type,
             "result": create_asset(AssetCreate(**asset_payload)),
