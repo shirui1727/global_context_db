@@ -954,3 +954,33 @@ git add app tests docs
 git commit -m "feat: compose readable cube scopes"
 git push
 ```
+
+---
+
+## Task 15: Cube snapshot export/import
+
+Goal: make Context Cubes portable through a minimal snapshot payload before heavier backup/marketplace features.
+
+- [x] RED test: export one cube with bindings/memories, switch to a fresh SQLite/LanceDB data dir, import payload, and verify cube/memory/binding restored.
+- [x] Add `export_cube_snapshot(cube_id)` returning `kind=context_cube_snapshot`, cube, bindings, memories, and counts.
+- [x] Add `import_cube_snapshot(snapshot)` restoring cube, memories, and bindings into current runtime.
+- [x] Expose REST: `GET /cubes/{cube_id}/snapshot`, `POST /cubes/snapshot/import`.
+- [x] Expose MCP: `gcd_export_cube_snapshot`, `gcd_import_cube_snapshot`.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_cubes.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```
+
+Commit:
+
+```powershell
+git add app tests docs
+git commit -m "feat: add cube snapshot import export"
+git push
+```

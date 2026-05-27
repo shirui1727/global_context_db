@@ -45,7 +45,7 @@ from app.core.schemas import (
     SessionTraceCreate,
     SessionUpdate,
 )
-from app.backup.service import export_snapshot, list_snapshots, restore_snapshot
+from app.backup.service import export_cube_snapshot, export_snapshot, import_cube_snapshot, list_snapshots, restore_snapshot
 from app.assets.service import (
     create_asset,
     get_asset,
@@ -697,6 +697,21 @@ def gcd_restore_snapshot(snapshot_path: str, api_key: str | None = None) -> dict
     bootstrap(settings)
     require_mcp_write_key(api_key)
     return restore_snapshot(snapshot_path)
+
+
+@mcp.tool()
+def gcd_export_cube_snapshot(cube_id: str) -> dict[str, Any]:
+    """Export a portable snapshot payload for one context cube."""
+    bootstrap(settings)
+    return export_cube_snapshot(cube_id)
+
+
+@mcp.tool()
+def gcd_import_cube_snapshot(snapshot: dict[str, Any], api_key: str | None = None) -> dict[str, Any]:
+    """Import a portable context cube snapshot payload."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return import_cube_snapshot(snapshot)
 
 
 @mcp.tool()

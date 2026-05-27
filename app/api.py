@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 
-from app.backup.service import export_snapshot, list_snapshots, restore_snapshot
+from app.backup.service import export_cube_snapshot, export_snapshot, import_cube_snapshot, list_snapshots, restore_snapshot
 from app.capture.crawl import create_crawl_job, get_crawl_job
 from app.capture.service import (
     capture_web,
@@ -21,6 +21,7 @@ from app.core.schemas import (
     ContextCubeBindingCreate,
     ContextCubeCreate,
     ContextCubeUpdate,
+    CubeSnapshotImportRequest,
     AssetScanRunCreate,
     AssetSearchRequest,
     AssetUpdate,
@@ -262,6 +263,22 @@ def snapshots_list(limit: int = 20) -> list[dict]:
 def snapshots_restore(payload: SnapshotRestoreRequest) -> dict:
     try:
         return restore_snapshot(payload.snapshot_path)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/cubes/{cube_id}/snapshot")
+def cube_snapshot_export(cube_id: str) -> dict:
+    try:
+        return export_cube_snapshot(cube_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/cubes/snapshot/import", dependencies=[Depends(require_api_key)])
+def cube_snapshot_import(payload: CubeSnapshotImportRequest) -> dict:
+    try:
+        return import_cube_snapshot(payload.snapshot)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

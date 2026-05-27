@@ -202,3 +202,52 @@ def test_recall_with_project_cube_includes_shared_and_kb_cubes(cube_env):
     assert result["cube_scope"]["base_cube_ids"] == [project["id"]]
     assert shared["id"] in result["cube_scope"]["readable_cube_ids"]
     assert kb["id"] in result["cube_scope"]["readable_cube_ids"]
+
+
+def test_cube_snapshot_export_import_round_trip(cube_env, tmp_path):
+    from app.backup.service import export_cube_snapshot, import_cube_snapshot
+    from app.core.config import settings
+    from app.core.schemas import ContextCubeBindingCreate, ContextCubeCreate, MemoryCreate
+    from app.cubes.service import bind_to_cube, create_cube, get_cube, list_cube_bindings
+    from app.memory.service import add_memory, list_memories
+    from app.storage.bootstrap import bootstrap, reset_bootstrap
+
+    cube = create_cube(ContextCubeCreate(name="Portable Cube", cube_type="project", owner_id="portable"))
+    memory = add_memory(MemoryCreate(cube_id=cube["id"], content="Portable cube memory survives import.", tags=["portable"]))["memory"]
+    bind_to_cube(cube["id"], ContextCubeBindingCreate(target_domain="memory", target_id=memory["id"]))
+
+    snapshot = export_cube_snapshot(cube["id"])
+
+    assert snapshot["kind"] == "context_cube_snapshot"
+    assert snapshot["cube"]["id"] == cube["id"]
+    assert snapshot["counts"]["memories"] == 1
+    assert snapshot["memories"][0]["content"] == "Portable cube memory survives import."
+
+    original = {
+        "data_dir": settings.data_dir,
+        "sqlite_path": settings.sqlite_path,
+        "lancedb_dir": settings.lancedb_dir,
+    }
+    try:
+        settings.data_dir = tmp_path / "imported"
+        settings.sqlite_path = settings.data_dir / "gcd.sqlite3"
+        settings.lancedb_dir = settings.data_dir / "lancedb"
+        reset_bootstrap()
+        bootstrap(settings)
+
+        imported = import_cube_snapshot(snapshot)
+        imported_cube = get_cube(cube["id"])
+        imported_memories = list_memories(limit=20)
+        imported_bindings = list_cube_bindings(cube["id"])
+
+        assert imported["ok"] is True
+        assert imported["counts"]["memories"] == 1
+        assert imported_cube["name"] == "Portable Cube"
+        assert imported_memories[0]["content"] == "Portable cube memory survives import."
+        assert imported_memories[0]["cube_id"] == cube["id"]
+        assert imported_bindings[0]["target_id"] == memory["id"]
+    finally:
+        for key, value in original.items():
+            setattr(settings, key, value)
+        reset_bootstrap()
+        bootstrap(settings)

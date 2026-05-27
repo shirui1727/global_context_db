@@ -569,3 +569,7 @@ class SnapshotCreateRequest(BaseModel):
 
 class SnapshotRestoreRequest(BaseModel):
     snapshot_path: str
+
+
+class CubeSnapshotImportRequest(BaseModel):
+    snapshot: dict[str, Any]

@@ -249,7 +249,7 @@ conflicted
 14. Redis scheduler.
 15. dashboard / graph memory.
 16. writable cube strategy.
-17. cube snapshot/export/import.
+17. cube snapshot/export/import. (portable payload done)
 
 ---
 

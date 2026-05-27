@@ -5,9 +5,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.core.config import settings
+from app.cubes.service import bind_to_cube, create_cube, get_cube
 from app.governance.service import diagnostics
+from app.core.schemas import ContextCubeBindingCreate, ContextCubeCreate, MemoryCreate
+from app.memory.service import add_memory
 from app.storage.bootstrap import bootstrap, reset_bootstrap
-from app.storage.repo import sqlite_path
+from app.storage.repo import cube_bindings_repo, memories_repo, sqlite_path
 
 
 SNAPSHOT_MANIFEST = "manifest.json"
@@ -64,6 +67,88 @@ def export_snapshot(label: str | None = None) -> dict:
         "snapshot_path": str(snapshot_path),
         "size_bytes": snapshot_path.stat().st_size,
         "manifest": manifest,
+    }
+
+
+def export_cube_snapshot(cube_id: str) -> dict:
+    bootstrap(settings)
+    cube = get_cube(cube_id)
+    bindings = cube_bindings_repo().list_by_cube(cube_id, limit=10000)
+    memories = [memory for memory in memories_repo().list_all(limit=10000) if memory.get("cube_id") == cube_id]
+    return {
+        "kind": "context_cube_snapshot",
+        "version": 1,
+        "exported_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "cube": cube,
+        "bindings": bindings,
+        "memories": memories,
+        "counts": {
+            "bindings": len(bindings),
+            "memories": len(memories),
+        },
+    }
+
+
+def import_cube_snapshot(snapshot: dict) -> dict:
+    bootstrap(settings)
+    if snapshot.get("kind") != "context_cube_snapshot":
+        raise ValueError("invalid cube snapshot kind")
+    cube = snapshot.get("cube") or {}
+    if not cube.get("id") or not cube.get("name"):
+        raise ValueError("invalid cube snapshot: missing cube")
+    create_cube(
+        ContextCubeCreate(
+            id=cube["id"],
+            name=cube["name"],
+            cube_type=cube.get("cube_type") or "project",
+            owner_id=cube.get("owner_id"),
+            visibility=cube.get("visibility") or "private",
+            status=cube.get("status") or "active",
+            created_by=cube.get("created_by"),
+            metadata=cube.get("metadata") or {},
+        )
+    )
+    imported_memories = []
+    for memory in snapshot.get("memories") or []:
+        imported_memories.append(
+            add_memory(
+                MemoryCreate(
+                    content=memory["content"],
+                    cube_id=cube["id"],
+                    tags=memory.get("tags") or [],
+                    user_id=memory.get("user_id") or "default",
+                    agent_id=memory.get("agent_id"),
+                    session_id=memory.get("session_id"),
+                    conversation_id=memory.get("conversation_id"),
+                    memory_type=memory.get("memory_type") or "long_term",
+                    context_domain=memory.get("context_domain") or "memory",
+                    status=memory.get("status") or "active",
+                    source_kind=memory.get("source_kind") or "cube_snapshot_import",
+                    trust_level=memory.get("trust_level") or "verified",
+                    metadata={**(memory.get("metadata") or {}), "imported_from_cube_snapshot": True},
+                )
+            )["memory"]
+        )
+    imported_bindings = []
+    for binding in snapshot.get("bindings") or []:
+        imported_bindings.append(
+            bind_to_cube(
+                cube["id"],
+                ContextCubeBindingCreate(
+                    target_domain=binding.get("target_domain") or "memory",
+                    target_id=binding.get("target_id"),
+                    binding_kind=binding.get("binding_kind") or "owns",
+                    metadata=binding.get("metadata") or {},
+                ),
+            )
+        )
+    return {
+        "ok": True,
+        "cube_id": cube["id"],
+        "counts": {
+            "memories": len(imported_memories),
+            "bindings": len(imported_bindings),
+        },
     }
 
 
