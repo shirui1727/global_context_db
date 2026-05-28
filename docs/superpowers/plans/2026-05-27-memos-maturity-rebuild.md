@@ -1416,3 +1416,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 34: Conflict hygiene related snapshots
+
+Goal: make conflict-resolution hygiene proposals reviewable by including snapshots for every affected memory, even when the task target is a synthetic conflict id rather than a single memory id.
+
+- [x] Use the first affected memory as the primary `review_snapshot` when a hygiene task targets a synthetic conflict id.
+- [x] Include remaining affected memories in `related_snapshots`.
+- [x] Verify conflict proposals expose both sides while staying proposal-only and deterministic.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_hygiene.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

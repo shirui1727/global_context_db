@@ -217,6 +217,7 @@ def _execute_memory_hygiene_task(task: dict, payload: ImproveRequest) -> dict:
         "resolve_memory_conflict": "compare_conflicting_memories",
     }.get(task_kind, "manual_review")
     affected_memory_ids = _hygiene_affected_memory_ids(task, candidate)
+    review_snapshot = _primary_hygiene_review_snapshot(task, affected_memory_ids)
     return {
         "status": "proposal",
         "task_kind": task_kind,
@@ -229,15 +230,25 @@ def _execute_memory_hygiene_task(task: dict, payload: ImproveRequest) -> dict:
         "executor": payload.created_by or "scheduler",
         "auto_mutation": False,
         "affected_memory_ids": affected_memory_ids,
-        "review_snapshot": _memory_review_snapshot(task.get("target_id")) if task.get("target_domain") == "memory" else None,
+        "review_snapshot": review_snapshot,
         "related_snapshots": [
             snapshot
             for memory_id in affected_memory_ids
-            if memory_id != task.get("target_id")
+            if not review_snapshot or memory_id != review_snapshot.get("id")
             for snapshot in [_memory_review_snapshot(memory_id)]
             if snapshot is not None
         ],
     }
+
+
+def _primary_hygiene_review_snapshot(task: dict, affected_memory_ids: list[str]) -> dict | None:
+    if task.get("target_domain") == "memory":
+        snapshot = _memory_review_snapshot(task.get("target_id"))
+        if snapshot is not None:
+            return snapshot
+    if affected_memory_ids:
+        return _memory_review_snapshot(affected_memory_ids[0])
+    return None
 
 
 def _hygiene_affected_memory_ids(task: dict, candidate: dict) -> list[str]:

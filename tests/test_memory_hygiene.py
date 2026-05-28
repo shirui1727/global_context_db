@@ -95,3 +95,31 @@ def test_memory_hygiene_executor_includes_review_snapshots(hygiene_env):
     assert proposal["review_snapshot"]["trust_level"] == "agent_inferred"
     assert proposal["review_snapshot"]["tags"] == ["hygiene-snapshot"]
     assert proposal["affected_memory_ids"] == [created["id"]]
+
+
+def test_memory_hygiene_conflict_proposal_includes_both_memory_snapshots(hygiene_env):
+    left = add_memory(
+        MemoryCreate(
+            content="Project policy should enable relation review.",
+            tags=["conflict-review"],
+            agent_id="codex",
+        )
+    )["memory"]
+    right = add_memory(
+        MemoryCreate(
+            content="Project policy should not enable relation review.",
+            tags=["conflict-review"],
+            agent_id="codex",
+        )
+    )["memory"]
+    enqueue_memory_hygiene(limit=10, created_by="hygiene-test")
+
+    result = run_pending_tasks(limit=10, queue_name="memory_hygiene", worker_id="hygiene-worker")
+    conflict = next(item["result"] for item in result["tasks"] if item["result"]["task_kind"] == "resolve_memory_conflict")
+
+    assert conflict["status"] == "proposal"
+    assert conflict["recommended_action"] == "compare_conflicting_memories"
+    assert set(conflict["affected_memory_ids"]) == {left["id"], right["id"]}
+    snapshots = [conflict["review_snapshot"], *conflict["related_snapshots"]]
+    assert {snapshot["id"] for snapshot in snapshots} == {left["id"], right["id"]}
+    assert all(snapshot["content_preview"] for snapshot in snapshots)
