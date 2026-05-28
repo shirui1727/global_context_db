@@ -52,6 +52,9 @@ def diagnostics() -> dict:
     improvement_queue_counts = improvement_tasks_repo().queue_counts()
     pending_by_queue = {item["queue_name"]: item["count"] for item in improvement_queue_counts if item["status"] == "pending"}
     failed_by_queue = {item["queue_name"]: item["count"] for item in improvement_queue_counts if item["status"] == "failed"}
+    failed_retry_counts = improvement_tasks_repo().failed_retry_counts_by_queue()
+    retryable_failed_by_queue = {item["queue_name"]: item["count"] for item in failed_retry_counts if item["retry_state"] == "retryable"}
+    exhausted_failed_by_queue = {item["queue_name"]: item["count"] for item in failed_retry_counts if item["retry_state"] == "exhausted"}
     return {
         "ok": True,
         "service": settings.service_name,
@@ -97,6 +100,9 @@ def diagnostics() -> dict:
                 "queue_counts": improvement_queue_counts,
                 "pending_by_queue": pending_by_queue,
                 "failed_by_queue": failed_by_queue,
+                "failed_retry_counts": failed_retry_counts,
+                "retryable_failed_by_queue": retryable_failed_by_queue,
+                "exhausted_failed_by_queue": exhausted_failed_by_queue,
                 "pending_promotion_count": pending_promotion_count,
             },
             "audit": {

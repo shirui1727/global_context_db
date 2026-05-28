@@ -2209,6 +2209,22 @@ class ImprovementTasksRepo:
             ).fetchall()
         return [{"queue_name": row[0], "status": row[1], "count": row[2]} for row in rows]
 
+    def failed_retry_counts_by_queue(self) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(queue_name, 'default'),
+                       case when retry_count < max_retries then 'retryable' else 'exhausted' end,
+                       count(*)
+                from improvement_tasks
+                where status = 'failed'
+                group by coalesce(queue_name, 'default'),
+                         case when retry_count < max_retries then 'retryable' else 'exhausted' end
+                order by coalesce(queue_name, 'default') asc
+                """
+            ).fetchall()
+        return [{"queue_name": row[0], "retry_state": row[1], "count": row[2]} for row in rows]
+
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         return {
             "id": row[0],

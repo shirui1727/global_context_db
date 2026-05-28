@@ -1542,3 +1542,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 40: Retry-state queue failure diagnostics
+
+Goal: distinguish retryable failed work from exhausted failures by queue so operators can decide whether to retry, inspect, or intervene manually without adding a dashboard.
+
+- [x] Add repo-level failed retry-state counts grouped by queue.
+- [x] Expose `failed_retry_counts`, `retryable_failed_by_queue`, and `exhausted_failed_by_queue` from scheduler status.
+- [x] Expose the same retry-state failure signals from diagnostics improvement governance output.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_diagnostics.py tests\test_scheduler.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

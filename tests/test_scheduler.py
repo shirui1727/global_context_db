@@ -182,3 +182,21 @@ def test_scheduler_status_reports_failed_by_queue(scheduler_env):
 
     assert status["failed_by_queue"]["asset"] == 1
     assert any(item["queue_name"] == "asset" and item["status"] == "failed" for item in status["queue_counts"])
+
+
+def test_scheduler_status_reports_retryable_and_exhausted_failed_by_queue(scheduler_env):
+    from app.scheduler.service import claim_next_task, fail_task, scheduler_status
+
+    _create_task(target_id="asset-retryable-queue", queue_name="asset", max_retries=2)
+    retryable = claim_next_task(queue_name="asset", worker_id="worker-retryable")
+    fail_task(retryable["id"], "retryable queue failure", retry_delay_seconds=60)
+
+    _create_task(target_id="asset-exhausted-queue", queue_name="asset", max_retries=1)
+    exhausted = claim_next_task(queue_name="asset", worker_id="worker-exhausted")
+    fail_task(exhausted["id"], "exhausted queue failure", retry_delay_seconds=60)
+
+    status = scheduler_status()
+
+    assert status["failed_by_queue"]["asset"] == 2
+    assert status["retryable_failed_by_queue"]["asset"] == 1
+    assert status["exhausted_failed_by_queue"]["asset"] == 1

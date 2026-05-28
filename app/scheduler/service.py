@@ -133,9 +133,15 @@ def scheduler_status() -> dict:
     queue_counts = improvement_tasks_repo().queue_counts()
     pending_by_queue = {item["queue_name"]: item["count"] for item in queue_counts if item["status"] == "pending"}
     failed_by_queue = {item["queue_name"]: item["count"] for item in queue_counts if item["status"] == "failed"}
+    failed_retry_counts = improvement_tasks_repo().failed_retry_counts_by_queue()
+    retryable_failed_by_queue = {item["queue_name"]: item["count"] for item in failed_retry_counts if item["retry_state"] == "retryable"}
+    exhausted_failed_by_queue = {item["queue_name"]: item["count"] for item in failed_retry_counts if item["retry_state"] == "exhausted"}
     return {
         "status_counts": improvement_tasks_repo().status_counts(),
         "queue_counts": queue_counts,
         "pending_by_queue": pending_by_queue,
         "failed_by_queue": failed_by_queue,
+        "failed_retry_counts": failed_retry_counts,
+        "retryable_failed_by_queue": retryable_failed_by_queue,
+        "exhausted_failed_by_queue": exhausted_failed_by_queue,
     }

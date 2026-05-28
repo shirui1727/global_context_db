@@ -113,3 +113,39 @@ def test_diagnostics_reports_failed_queue_pressure(diagnostics_env):
 
     assert improvement["failed_by_queue"]["asset"] == 1
     assert any(item["queue_name"] == "asset" and item["status"] == "failed" for item in improvement["queue_counts"])
+
+
+def test_diagnostics_reports_retryable_and_exhausted_failed_queue_pressure(diagnostics_env):
+    from app.scheduler.service import claim_next_task, fail_task
+
+    create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="reindex_asset",
+            target_domain="asset",
+            target_id="asset-diag-retryable-failed",
+            queue_name="asset",
+            max_retries=2,
+            created_by="diag-test",
+        )
+    )
+    retryable = claim_next_task(queue_name="asset", worker_id="diag-retryable")
+    fail_task(retryable["id"], "retryable diagnostic failure", retry_delay_seconds=60)
+
+    create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="reindex_asset",
+            target_domain="asset",
+            target_id="asset-diag-exhausted-failed",
+            queue_name="asset",
+            max_retries=1,
+            created_by="diag-test",
+        )
+    )
+    exhausted = claim_next_task(queue_name="asset", worker_id="diag-exhausted")
+    fail_task(exhausted["id"], "exhausted diagnostic failure", retry_delay_seconds=60)
+
+    improvement = diagnostics()["governance"]["improvement"]
+
+    assert improvement["failed_by_queue"]["asset"] == 2
+    assert improvement["retryable_failed_by_queue"]["asset"] == 1
+    assert improvement["exhausted_failed_by_queue"]["asset"] == 1
