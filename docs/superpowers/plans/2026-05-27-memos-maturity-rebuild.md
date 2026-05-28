@@ -1605,3 +1605,23 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 43: NAS package verification coverage catch-up
+
+Goal: make NAS package verification cover the scheduler, diagnostics, hygiene, and relation-index files added during recent hardening so shipping cannot silently omit those capabilities.
+
+- [x] Require scheduler, governance diagnostics, memory hygiene, relation index, and storage repo files in `scripts/package-nas-update.ps1` package self-check.
+- [x] Require the same entries in `scripts/verify-nas-package.ps1`.
+- [x] Verify the updated NAS package still builds and passes package verification.
+
+Verification:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+```

@@ -16,6 +16,12 @@ try {
         "global_context_db/app/api.py",
         "global_context_db/app/assets/service.py",
         "global_context_db/app/core/config.py",
+        "global_context_db/app/governance/service.py",
+        "global_context_db/app/improvements/service.py",
+        "global_context_db/app/memory/graph_service.py",
+        "global_context_db/app/memory/service.py",
+        "global_context_db/app/scheduler/service.py",
+        "global_context_db/app/storage/repo.py",
         "global_context_db/docker-compose.yaml",
         "global_context_db/tools/media_manifest_worker.py",
         "global_context_db/tools/retrieval_eval_fixture.py"
