@@ -1479,3 +1479,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 37: Scheduler queue pressure diagnostics
+
+Goal: make scheduler status useful for operating multiple lightweight queues such as `asset`, `memory_hygiene`, and `default` without introducing Redis or a dashboard.
+
+- [x] Add repo-level queue/status aggregate counts for improvement tasks.
+- [x] Expose `queue_counts` and `pending_by_queue` from `scheduler_status()`.
+- [x] Verify queue pressure is visible for both asset and memory hygiene queues.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_scheduler.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

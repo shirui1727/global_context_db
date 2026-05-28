@@ -155,3 +155,17 @@ def test_scheduler_run_pending_summary_includes_queue_worker_and_task_ids(schedu
     assert result["task_ids"] == [task["id"]]
     assert result["tasks"][0]["task_id"] == task["id"]
     assert result["tasks"][0]["task_kind"] == "reindex_asset"
+
+
+def test_scheduler_status_reports_queue_counts(scheduler_env):
+    from app.scheduler.service import scheduler_status
+
+    _create_task(target_id="asset-status", queue_name="asset")
+    _create_task(target_id="hygiene-status", task_kind="verify_memory_evidence", target_domain="memory", queue_name="memory_hygiene")
+
+    status = scheduler_status()
+
+    assert any(item["queue_name"] == "asset" and item["status"] == "pending" for item in status["queue_counts"])
+    assert any(item["queue_name"] == "memory_hygiene" and item["status"] == "pending" for item in status["queue_counts"])
+    assert status["pending_by_queue"]["asset"] == 1
+    assert status["pending_by_queue"]["memory_hygiene"] == 1

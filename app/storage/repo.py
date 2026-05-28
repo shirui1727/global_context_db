@@ -2197,6 +2197,18 @@ class ImprovementTasksRepo:
             ).fetchall()
         return [{"status": row[0], "task_kind": row[1], "count": row[2]} for row in rows]
 
+    def queue_counts(self) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(queue_name, 'default'), coalesce(status, 'pending'), count(*)
+                from improvement_tasks
+                group by coalesce(queue_name, 'default'), coalesce(status, 'pending')
+                order by coalesce(queue_name, 'default') asc, coalesce(status, 'pending') asc
+                """
+            ).fetchall()
+        return [{"queue_name": row[0], "status": row[1], "count": row[2]} for row in rows]
+
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         return {
             "id": row[0],

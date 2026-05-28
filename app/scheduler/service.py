@@ -130,4 +130,10 @@ def _task_run_item(task: dict, *, ok: bool, result: dict[str, Any] | None = None
 
 
 def scheduler_status() -> dict:
-    return {"status_counts": improvement_tasks_repo().status_counts()}
+    queue_counts = improvement_tasks_repo().queue_counts()
+    pending_by_queue = {item["queue_name"]: item["count"] for item in queue_counts if item["status"] == "pending"}
+    return {
+        "status_counts": improvement_tasks_repo().status_counts(),
+        "queue_counts": queue_counts,
+        "pending_by_queue": pending_by_queue,
+    }
