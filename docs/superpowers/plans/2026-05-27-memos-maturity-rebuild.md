@@ -1267,3 +1267,27 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\relea
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 27: Lightweight memory relation index
+
+Goal: explore graph-style memory navigation as a lightweight SQLite relation index, not a separate graph database or dashboard.
+
+- [x] RED test: relation index links memories with shared tags and links memories to evidence sources.
+- [x] Add `memory_relations` table and repo with source/target/relation_kind indexes.
+- [x] Add `app.memory.graph_service` to build `shared_tag` and `supported_by` edges from existing memory/evidence data.
+- [x] Expose REST `/memories/relations/rebuild`, `/memories/relations` and MCP `gcd_build_memory_relation_index`, `gcd_list_memory_relations`.
+- [x] Add diagnostics sample count while preserving boundary: this is only a relation index on SQLite, not a graph DB replacement.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_graph.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+git status --short
+```

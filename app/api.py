@@ -112,6 +112,7 @@ from app.memory.service import (
     update_memory_promotion,
     update_memory,
 )
+from app.memory.graph_service import build_memory_relation_index, list_memory_relations
 from app.retrieval.service import run_retrieval_eval, search_context
 from app.sessions.service import (
     add_session_event,
@@ -969,6 +970,16 @@ def memories_search(
 @router.get("/memories/quality")
 def memories_quality(limit: int = 100) -> dict:
     return memory_quality_report(limit)
+
+
+@router.post("/memories/relations/rebuild", dependencies=[Depends(require_api_key)])
+def memories_relations_rebuild(limit: int = 500, created_by: str | None = None) -> dict:
+    return build_memory_relation_index(limit=limit, created_by=created_by)
+
+
+@router.get("/memories/relations")
+def memories_relations_list(source_id: str | None = None, limit: int = 100) -> list[dict]:
+    return list_memory_relations(source_id=source_id, limit=limit)
 
 
 @router.post("/memories/quality/enqueue-improvements", dependencies=[Depends(require_api_key)])

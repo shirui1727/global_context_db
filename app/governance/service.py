@@ -3,6 +3,7 @@ from pathlib import Path
 from app.assets.service import permission_policy
 from app.core.config import settings
 from app.memory.service import list_audit_logs, memory_quality_report
+from app.memory.graph_service import list_memory_relations
 from app.storage.repo import (
     agent_sessions_repo,
     assets_repo,
@@ -70,6 +71,10 @@ def diagnostics() -> dict:
                 "duplicate_candidates": memories_repo().duplicate_candidates(limit=20),
                 "promotion_status_counts": memory_promotion_proposals_repo().status_counts(),
                 "quality": memory_quality_report(limit=20),
+                "relation_index": {
+                    "purpose": "lightweight SQLite relation index; not a graph database",
+                    "sample_count": len(list_memory_relations(limit=20)),
+                },
             },
             "asset": {
                 "domain": "asset",

@@ -99,6 +99,7 @@ from app.sessions.service import (
     get_resume_context,
     update_session,
 )
+from app.memory.graph_service import build_memory_relation_index, list_memory_relations
 from app.storage.bootstrap import bootstrap
 from app.storage.repo import audit_logs_repo
 
@@ -535,6 +536,21 @@ def gcd_memory_quality_report(limit: int = 100) -> dict[str, Any]:
     """Report low-evidence, stale, and conflict candidate memories."""
     bootstrap(settings)
     return memory_quality_report(limit)
+
+
+@mcp.tool()
+def gcd_build_memory_relation_index(limit: int = 500, created_by: str | None = None, api_key: str | None = None) -> dict[str, Any]:
+    """Build a lightweight SQLite relation index for memories without adding a graph database."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return build_memory_relation_index(limit=limit, created_by=created_by)
+
+
+@mcp.tool()
+def gcd_list_memory_relations(source_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    """List lightweight relation-index edges for memories."""
+    bootstrap(settings)
+    return list_memory_relations(source_id=source_id, limit=limit)
 
 
 @mcp.tool()

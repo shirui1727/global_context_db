@@ -117,6 +117,22 @@ def init_sqlite(path: Path) -> None:
     )
     conn.execute(
         """
+        create table if not exists memory_relations (
+            id text primary key,
+            source_domain text,
+            source_id text,
+            relation_kind text,
+            target_domain text,
+            target_id text,
+            weight real default 1.0,
+            created_at text,
+            metadata text default '{}',
+            unique(source_domain, source_id, relation_kind, target_domain, target_id)
+        )
+        """
+    )
+    conn.execute(
+        """
         create table if not exists memory_candidates (
             id text primary key,
             cube_id text,
@@ -634,6 +650,9 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         "create index if not exists idx_memory_evidence_source on memory_evidence(source_domain, source_id)",
         "create index if not exists idx_memory_lifecycle_memory_id on memory_lifecycle_events(memory_id)",
         "create index if not exists idx_memory_lifecycle_kind on memory_lifecycle_events(event_kind)",
+        "create index if not exists idx_memory_relations_source on memory_relations(source_domain, source_id)",
+        "create index if not exists idx_memory_relations_target on memory_relations(target_domain, target_id)",
+        "create index if not exists idx_memory_relations_kind on memory_relations(relation_kind)",
         "create index if not exists idx_memory_candidates_status on memory_candidates(status)",
         "create index if not exists idx_memory_candidates_source on memory_candidates(source_domain, source_id)",
         "create index if not exists idx_hook_subscriptions_name_status on hook_subscriptions(hook_name, status)",
@@ -706,6 +725,7 @@ def db_counts() -> dict[str, int]:
         "memory_versions",
         "memory_evidence",
         "memory_lifecycle_events",
+        "memory_relations",
         "memory_candidates",
         "memory_feedback",
         "memory_feedback_actions",
@@ -2470,6 +2490,66 @@ class MemoryEvidenceRepo:
         }
 
 
+class MemoryRelationsRepo:
+    def upsert(self, row: dict) -> dict:
+        with _conn() as conn:
+            conn.execute(
+                """
+                insert into memory_relations(
+                    id, source_domain, source_id, relation_kind, target_domain, target_id,
+                    weight, created_at, metadata
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(source_domain, source_id, relation_kind, target_domain, target_id) do update set
+                    weight=excluded.weight,
+                    metadata=excluded.metadata
+                """,
+                (
+                    row["id"],
+                    row.get("source_domain"),
+                    row.get("source_id"),
+                    row.get("relation_kind"),
+                    row.get("target_domain"),
+                    row.get("target_id"),
+                    row.get("weight", 1.0),
+                    row.get("created_at"),
+                    json.dumps(row.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
+        return row
+
+    def list_by_source(self, source_domain: str = "memory", source_id: str | None = None, limit: int = 100) -> list[dict]:
+        where = ["source_domain = ?"]
+        params: list[str | int] = [source_domain]
+        if source_id:
+            where.append("source_id = ?")
+            params.append(source_id)
+        query = """
+            select id, source_domain, source_id, relation_kind, target_domain, target_id,
+                   weight, created_at, metadata
+            from memory_relations
+            where {where}
+            order by weight desc, rowid desc
+            limit ?
+        """.format(where=" and ".join(where))
+        params.append(limit)
+        with _conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._decode(row) for row in rows]
+
+    def _decode(self, row: sqlite3.Row | tuple) -> dict:
+        return {
+            "id": row[0],
+            "source_domain": row[1],
+            "source_id": row[2],
+            "relation_kind": row[3],
+            "target_domain": row[4],
+            "target_id": row[5],
+            "weight": row[6],
+            "created_at": row[7],
+            "metadata": _json_loads(row[8], {}),
+        }
+
+
 class MemoryLifecycleEventsRepo:
     def insert(self, row: dict) -> dict:
         with _conn() as conn:
@@ -3478,6 +3558,10 @@ def memory_versions_repo() -> MemoryVersionsRepo:
 
 def memory_evidence_repo() -> MemoryEvidenceRepo:
     return MemoryEvidenceRepo()
+
+
+def memory_relations_repo() -> MemoryRelationsRepo:
+    return MemoryRelationsRepo()
 
 
 def memory_lifecycle_events_repo() -> MemoryLifecycleEventsRepo:
