@@ -1458,3 +1458,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 36: Scheduler run summary audit fields
+
+Goal: make scheduler executions easier to audit through REST/MCP and hygiene review surfaces by returning stable queue, worker, and task identity fields.
+
+- [x] Add `queue_name`, `worker_id`, `requested_limit`, and `task_ids` to `run_pending_tasks()` summary output.
+- [x] Add per-task `task_id`, `task_kind`, target, queue, and worker fields while preserving the existing nested `task` and `result` payloads.
+- [x] Verify existing scheduler, hygiene, and surface callers remain compatible.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_scheduler.py tests\test_memory_hygiene.py tests\test_memory_surfaces.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

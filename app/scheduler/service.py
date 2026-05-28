@@ -77,25 +77,56 @@ def retry_failed_tasks(now: str | None = None) -> int:
 
 
 def run_pending_tasks(limit: int = 10, queue_name: str = "default", worker_id: str = "local") -> dict:
-    summary: dict[str, Any] = {"claimed": 0, "done": 0, "failed": 0, "tasks": []}
-    for _ in range(max(0, limit)):
-        task = claim_next_task(queue_name=queue_name, worker_id=worker_id)
+    requested_limit = max(0, limit)
+    normalized_queue = queue_name or "default"
+    normalized_worker = worker_id or "local"
+    summary: dict[str, Any] = {
+        "queue_name": normalized_queue,
+        "worker_id": normalized_worker,
+        "requested_limit": requested_limit,
+        "claimed": 0,
+        "done": 0,
+        "failed": 0,
+        "task_ids": [],
+        "tasks": [],
+    }
+    for _ in range(requested_limit):
+        task = claim_next_task(queue_name=normalized_queue, worker_id=normalized_worker)
         if not task:
             break
         summary["claimed"] += 1
+        summary["task_ids"].append(task["id"])
         try:
             from app.improvements import service as improvements_service
 
-            result = improvements_service.execute_improvement_task(task, actor=worker_id)
+            result = improvements_service.execute_improvement_task(task, actor=normalized_worker)
         except Exception as error:
             failed = fail_task(task["id"], str(error))
             summary["failed"] += 1
-            summary["tasks"].append({"task": failed, "ok": False, "error": str(error)})
+            summary["tasks"].append(_task_run_item(failed, ok=False, error=str(error)))
             continue
         done = complete_task(task["id"], result)
         summary["done"] += 1
-        summary["tasks"].append({"task": done, "ok": True, "result": result})
+        summary["tasks"].append(_task_run_item(done, ok=True, result=result))
     return summary
+
+
+def _task_run_item(task: dict, *, ok: bool, result: dict[str, Any] | None = None, error: str | None = None) -> dict:
+    item: dict[str, Any] = {
+        "task_id": task["id"],
+        "task_kind": task.get("task_kind"),
+        "target_domain": task.get("target_domain"),
+        "target_id": task.get("target_id"),
+        "queue_name": task.get("queue_name"),
+        "worker_id": task.get("worker_id"),
+        "ok": ok,
+        "task": task,
+    }
+    if result is not None:
+        item["result"] = result
+    if error is not None:
+        item["error"] = error
+    return item
 
 
 def scheduler_status() -> dict:

@@ -135,3 +135,23 @@ def test_scheduler_run_pending_tasks_executes_known_task(scheduler_env, monkeypa
     assert result["done"] == 1
     assert result["failed"] == 0
     assert tasks[0]["metadata"]["result"]["ok"] is True
+
+
+def test_scheduler_run_pending_summary_includes_queue_worker_and_task_ids(scheduler_env, monkeypatch):
+    from app.scheduler.service import run_pending_tasks
+
+    task = _create_task(target_id="asset-summary")
+
+    def fake_execute(claimed_task, actor="scheduler", clean_legacy=True):
+        return {"ok": True, "actor": actor}
+
+    monkeypatch.setattr("app.improvements.service.execute_improvement_task", fake_execute)
+
+    result = run_pending_tasks(limit=1, queue_name="asset", worker_id="worker-summary")
+
+    assert result["queue_name"] == "asset"
+    assert result["worker_id"] == "worker-summary"
+    assert result["requested_limit"] == 1
+    assert result["task_ids"] == [task["id"]]
+    assert result["tasks"][0]["task_id"] == task["id"]
+    assert result["tasks"][0]["task_kind"] == "reindex_asset"
