@@ -1,5 +1,7 @@
 from typing import Any
 
+from datetime import datetime, timezone
+from hashlib import sha256
 from mcp.server.fastmcp import FastMCP
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
@@ -97,6 +99,7 @@ from app.sessions.service import (
     update_session,
 )
 from app.storage.bootstrap import bootstrap
+from app.storage.repo import audit_logs_repo
 
 mcp = FastMCP(
     "global-context-db",
@@ -140,6 +143,23 @@ def require_mcp_write_key(api_key: str | None = None) -> None:
     if settings.api_key and api_key == settings.api_key:
         return
     raise ValueError("invalid or missing MCP API key")
+
+
+def audit_mcp_high_risk_write(tool_name: str, operation: str, target_id: str | None = None, metadata: dict[str, Any] | None = None) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    safe_metadata = {key: value for key, value in (metadata or {}).items() if key not in {"api_key", "token", "password", "authorization"}}
+    safe_metadata.update({"tool": tool_name, "operation": operation, "risk": "high"})
+    audit_logs_repo().insert(
+        {
+            "id": sha256(f"{now}:mcp:{tool_name}:{operation}:{target_id or ''}".encode("utf-8")).hexdigest(),
+            "actor": "mcp",
+            "action": "mcp.high_risk_write",
+            "target_type": "mcp_tool",
+            "target_id": tool_name,
+            "created_at": now,
+            "metadata": safe_metadata,
+        }
+    )
 
 
 @mcp.tool()
@@ -459,6 +479,7 @@ def gcd_apply_memory_feedback(
     """Apply pending manual actions for a memory feedback record."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
+    audit_mcp_high_risk_write("gcd_apply_memory_feedback", "apply_memory_feedback", feedback_id, {"feedback_id": feedback_id, "actor": actor})
     return _feedback_handler().apply(feedback_id, actor=actor)
 
 
@@ -654,6 +675,7 @@ def gcd_review_memory_promotion(
     """Approve/promote or reject a memory promotion proposal."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
+    audit_mcp_high_risk_write("gcd_review_memory_promotion", "review_memory_promotion", proposal_id, {"proposal_id": proposal_id, "action": action})
     return review_memory_promotion(
         proposal_id,
         MemoryPromotionReview(
@@ -750,6 +772,16 @@ def gcd_update_memory(
     """Update a stored memory."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
+    audit_mcp_high_risk_write("gcd_update_memory", "update_memory", memory_id, {"changed_fields": [key for key, value in {
+        "content": content,
+        "tags": tags,
+        "user_id": user_id,
+        "agent_id": agent_id,
+        "session_id": session_id,
+        "conversation_id": conversation_id,
+        "memory_type": memory_type,
+        "metadata": metadata,
+    }.items() if value is not None]})
     return update_memory(
         memory_id,
         MemoryUpdate(
@@ -770,6 +802,7 @@ def gcd_delete_memory(memory_id: str, api_key: str | None = None) -> dict[str, A
     """Delete a stored memory."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
+    audit_mcp_high_risk_write("gcd_delete_memory", "delete_memory", memory_id, {"memory_id": memory_id})
     return delete_memory(memory_id)
 
 
@@ -891,6 +924,7 @@ def gcd_update_asset(
     """Update governed asset metadata and lifecycle state."""
     bootstrap(settings)
     require_mcp_write_key(api_key)
+    audit_mcp_high_risk_write("gcd_update_asset", "update_asset", asset_id, {"asset_id": asset_id, "status": status, "analysis_status": analysis_status})
     return update_asset(
         asset_id,
         AssetUpdate(

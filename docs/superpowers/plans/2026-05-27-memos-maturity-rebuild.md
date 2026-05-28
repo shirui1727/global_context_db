@@ -1200,3 +1200,26 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\relea
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 24: MCP high-risk write audit actions
+
+Goal: make high-risk MCP write tools more explicit in audit logs so NAS operators can see when an agent used a dangerous control-plane action, without logging secrets or adding interactive confirmation that would break MCP clients.
+
+- [x] RED test: `gcd_delete_memory` emits a distinct `mcp.high_risk_write` audit log before deleting a memory.
+- [x] Add `audit_mcp_high_risk_write()` helper that strips secret-like metadata keys and writes `target_type=mcp_tool`.
+- [x] Wire explicit high-risk MCP audit into memory update/delete, memory feedback apply, memory promotion review, and asset update.
+- [x] Keep existing service-level domain audit logs intact; this is an MCP-call audit layer, not a replacement.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_mcp_audit.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+git status --short
+```
