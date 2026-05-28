@@ -72,6 +72,50 @@ def test_build_scan_run_recurses_supported_files_and_skips_noise(tmp_path: Path)
     assert {item["asset_kind"] for item in payload["observed"]} == {"document", "image"}
 
 
+def test_build_analysis_manifest_uses_ffprobe_adapter_for_video(tmp_path: Path):
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"fake video")
+    artifact_root = tmp_path / "artifacts"
+
+    def fake_probe(path: Path):
+        assert path == source.resolve()
+        return {"format": {"duration": "12.5"}, "streams": [{"codec_type": "video", "codec_name": "h264"}]}
+
+    manifest = build_analysis_manifest(
+        source,
+        asset_id="asset-video",
+        artifact_uri_prefix="/data/artifacts",
+        artifact_root=artifact_root,
+        generated_by="pytest-worker",
+        ffprobe=fake_probe,
+    )
+
+    artifact = manifest["payload"]["artifacts"][0]
+    assert artifact["artifact_kind"] == "probe_metadata"
+    assert artifact["text"]
+    assert artifact["metadata"]["probe_status"] == "ready"
+    assert artifact["metadata"]["probe"]["format"]["duration"] == "12.5"
+    assert (artifact_root / "asset-video" / "clip.probe.json").exists()
+
+
+def test_build_analysis_manifest_uses_text_adapters_for_media(tmp_path: Path):
+    source = tmp_path / "frame.jpg"
+    source.write_bytes(b"fake image")
+
+    manifest = build_analysis_manifest(
+        source,
+        asset_id="asset-image",
+        artifact_uri_prefix="/data/artifacts",
+        artifact_root=tmp_path / "artifacts",
+        ocr_adapter=lambda path: "OCR says visible sign",
+        asr_adapter=lambda path: "should not be used for image",
+    )
+
+    kinds = [artifact["artifact_kind"] for artifact in manifest["payload"]["artifacts"]]
+    assert "ocr_text" in kinds
+    assert any(artifact["text"] == "OCR says visible sign" for artifact in manifest["payload"]["artifacts"])
+    assert manifest["payload"]["summary"] == "OCR says visible sign"
+
 def test_post_json_sends_api_key_and_payload():
     captured = {}
 

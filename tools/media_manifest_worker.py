@@ -3,9 +3,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from mimetypes import guess_type
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -105,6 +106,9 @@ def build_analysis_manifest(
     artifact_uri_prefix: str,
     artifact_root: Path,
     generated_by: str = "media_manifest_worker",
+    ffprobe: Callable[[Path], dict[str, Any] | None] | None = None,
+    ocr_adapter: Callable[[Path], str | None] | None = None,
+    asr_adapter: Callable[[Path], str | None] | None = None,
 ) -> dict[str, Any]:
     path = path.resolve()
     artifact_root = artifact_root.resolve()
@@ -128,23 +132,55 @@ def build_analysis_manifest(
             )
         )
     elif asset_kind == "image":
+        probe = _safe_probe(path, ffprobe)
+        probe_uri = f"{artifact_uri_prefix.rstrip('/')}/{asset_id}/{path.stem}.probe.json"
+        _write_json_artifact(asset_dir / f"{path.stem}.probe.json", probe)
         artifacts.append(
             _artifact(
                 "probe_metadata",
-                f"{artifact_uri_prefix.rstrip('/')}/{asset_id}/{path.stem}.probe.json",
+                probe_uri,
                 "application/json",
-                metadata={"source_path": str(path), "note": "placeholder; replace with exif/ocr worker output"},
+                text=json.dumps(probe, ensure_ascii=False),
+                metadata={"source_path": str(path), "probe_status": "ready" if probe else "placeholder", "probe": probe},
             )
         )
+        ocr_text = _safe_text_adapter(path, ocr_adapter)
+        if ocr_text:
+            summary = _preview(ocr_text)
+            artifacts.append(
+                _artifact(
+                    "ocr_text",
+                    f"{artifact_uri_prefix.rstrip('/')}/{asset_id}/{path.stem}.ocr.txt",
+                    "text/plain",
+                    text=ocr_text,
+                    metadata={"source_path": str(path), "adapter": "ocr"},
+                )
+            )
     elif asset_kind == "video":
+        probe = _safe_probe(path, ffprobe)
+        probe_uri = f"{artifact_uri_prefix.rstrip('/')}/{asset_id}/{path.stem}.probe.json"
+        _write_json_artifact(asset_dir / f"{path.stem}.probe.json", probe)
         artifacts.append(
             _artifact(
                 "probe_metadata",
-                f"{artifact_uri_prefix.rstrip('/')}/{asset_id}/{path.stem}.probe.json",
+                probe_uri,
                 "application/json",
-                metadata={"source_path": str(path), "note": "placeholder; replace with ffprobe/asr/keyframe worker output"},
+                text=json.dumps(probe, ensure_ascii=False),
+                metadata={"source_path": str(path), "probe_status": "ready" if probe else "placeholder", "probe": probe},
             )
         )
+        asr_text = _safe_text_adapter(path, asr_adapter)
+        if asr_text:
+            summary = _preview(asr_text)
+            artifacts.append(
+                _artifact(
+                    "asr_text",
+                    f"{artifact_uri_prefix.rstrip('/')}/{asset_id}/{path.stem}.asr.txt",
+                    "text/plain",
+                    text=asr_text,
+                    metadata={"source_path": str(path), "adapter": "asr"},
+                )
+            )
     else:
         artifacts.append(
             _artifact(
@@ -205,6 +241,37 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+def run_ffprobe(path: Path, ffprobe_bin: str = "ffprobe") -> dict[str, Any]:
+    command = [
+        ffprobe_bin,
+        "-v",
+        "error",
+        "-show_format",
+        "-show_streams",
+        "-of",
+        "json",
+        str(path),
+    ]
+    completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    return json.loads(completed.stdout or "{}")
+
+
+def _safe_probe(path: Path, ffprobe: Callable[[Path], dict[str, Any] | None] | None) -> dict[str, Any] | None:
+    if not ffprobe:
+        return None
+    return ffprobe(path)
+
+
+def _safe_text_adapter(path: Path, adapter: Callable[[Path], str | None] | None) -> str:
+    if not adapter:
+        return ""
+    return adapter(path) or ""
+
+
+def _write_json_artifact(path: Path, payload: dict[str, Any] | None) -> None:
+    path.write_text(json.dumps(payload or {}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _preview(text: str, limit: int = 500) -> str:
     return " ".join(text.split())[:limit]
 
@@ -230,6 +297,10 @@ def main() -> None:
     parser.add_argument("--post-url", default=None)
     parser.add_argument("--api-key", default=None)
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--ffprobe", action="store_true", help="Run ffprobe for image/video probe_metadata when available.")
+    parser.add_argument("--ffprobe-bin", default="ffprobe")
+    parser.add_argument("--ocr-text-file", type=Path, default=None, help="Optional OCR adapter text file to attach for image assets.")
+    parser.add_argument("--asr-text-file", type=Path, default=None, help="Optional ASR adapter text file to attach for video assets.")
     args = parser.parse_args()
     if args.mode == "scan-item":
         payload = build_scan_item(args.path, uri_prefix=args.uri_prefix, root=args.root)
@@ -250,6 +321,9 @@ def main() -> None:
             artifact_uri_prefix=args.artifact_uri_prefix,
             artifact_root=args.artifact_root,
             generated_by=args.generated_by,
+            ffprobe=(lambda item: run_ffprobe(item, args.ffprobe_bin)) if args.ffprobe else None,
+            ocr_adapter=(lambda _item: args.ocr_text_file.read_text(encoding="utf-8", errors="replace")) if args.ocr_text_file else None,
+            asr_adapter=(lambda _item: args.asr_text_file.read_text(encoding="utf-8", errors="replace")) if args.asr_text_file else None,
         )
     if args.post_url:
         response = post_json(args.post_url, payload["payload"] if args.mode == "analysis-manifest" else payload, api_key=args.api_key, timeout=args.timeout)

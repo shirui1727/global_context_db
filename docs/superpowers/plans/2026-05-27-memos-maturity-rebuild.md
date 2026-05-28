@@ -1176,3 +1176,27 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\relea
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 23: Media manifest worker probe adapters
+
+Goal: upgrade `tools/media_manifest_worker.py` from placeholder media probes to optional real probe/text adapters while keeping heavy OCR/ASR/ffmpeg execution outside the GCD service boundary.
+
+- [x] RED test: video analysis manifest can use an injected ffprobe adapter and writes `probe_metadata` JSON artifacts.
+- [x] RED test: image analysis manifest can attach OCR adapter text as an `ocr_text` artifact and summary.
+- [x] Add `run_ffprobe()` helper and CLI flags `--ffprobe` / `--ffprobe-bin` for external ffprobe usage.
+- [x] Add CLI adapter file flags `--ocr-text-file` and `--asr-text-file` for externally produced OCR/ASR text.
+- [x] Preserve NAS-first boundary: GCD service still only registers manifests/artifacts; media processing stays in the worker or external tools.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_media_manifest_worker.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+git status --short
+```
