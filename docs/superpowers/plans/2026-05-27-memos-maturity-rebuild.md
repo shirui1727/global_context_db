@@ -1223,3 +1223,23 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\relea
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 25: Richer memory evidence source spans
+
+Goal: make the existing `source_span` contract explicit and verified for richer provenance such as document chunk offsets, asset artifact ids, and session event quote hashes.
+
+- [x] RED-style coverage: memory evidence can persist selector plus `source_span.metadata.asset_artifact_id`, `session_event_id`, and `document_chunk_id`.
+- [x] Confirm existing `ReaderEvidenceSpan.metadata` is sufficient for richer provenance without a schema migration.
+- [x] Keep evidence storage generic: source-specific identifiers stay in `source_span.metadata` rather than adding narrow columns per source type.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_reader.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```

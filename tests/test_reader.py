@@ -6,7 +6,7 @@ import pytest
 from app.assets.service import create_asset
 from app.control.service import remember
 from app.core.config import settings
-from app.core.schemas import AssetCreate, IngestRequest, RememberRequest, SessionCreate, SessionEventCreate
+from app.core.schemas import AssetCreate, IngestRequest, MemoryCreate, MemoryEvidenceCreate, ReaderEvidenceSpan, RememberRequest, SessionCreate, SessionEventCreate
 from app.cubes.service import create_cube
 from app.core.schemas import ContextCubeCreate
 from app.ingest.pipeline import ingest_text
@@ -22,6 +22,8 @@ from app.retrieval.service import search_context
 from app.sessions.service import add_session_event, create_session
 from app.storage.bootstrap import bootstrap, reset_bootstrap
 from app.memory.service import (
+    add_memory,
+    add_memory_evidence,
     create_memory_candidates_from_fine_reader,
     create_memory_candidate_from_reader,
     list_memory_evidence,
@@ -158,6 +160,36 @@ def test_reader_candidate_promotion_persists_evidence_span(reader_env):
     assert evidence[0]["source_span"]["start"] == 0
     assert evidence[0]["source_span"]["end"] == len(evidence[0]["quote"])
 
+
+def test_memory_evidence_accepts_richer_source_span_metadata(reader_env):
+    memory = add_memory(MemoryCreate(content="Evidence should point to exact artifact and event quote.", agent_id="codex"))["memory"]
+
+    evidence = add_memory_evidence(
+        memory["id"],
+        MemoryEvidenceCreate(
+            source_domain="asset_artifact",
+            source_id="artifact-1",
+            quote="exact artifact and event quote",
+            source_span=ReaderEvidenceSpan(
+                span_type="char",
+                start=25,
+                end=55,
+                quote_hash="hash-quote",
+                selector="artifact://artifact-1#char=25,55",
+                metadata={
+                    "asset_id": "asset-1",
+                    "asset_artifact_id": "artifact-1",
+                    "session_event_id": "event-1",
+                    "document_chunk_id": "chunk-1",
+                },
+            ),
+        ),
+    )
+
+    assert evidence["source_span"]["selector"] == "artifact://artifact-1#char=25,55"
+    assert evidence["source_span"]["metadata"]["asset_artifact_id"] == "artifact-1"
+    assert evidence["source_span"]["metadata"]["session_event_id"] == "event-1"
+    assert evidence["source_span"]["metadata"]["document_chunk_id"] == "chunk-1"
 
 def test_reader_fine_mode_extracts_deterministic_candidates(reader_env):
     item = read_text_fine(
