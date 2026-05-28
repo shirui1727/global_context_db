@@ -55,6 +55,20 @@ def diagnostics() -> dict:
     failed_retry_counts = improvement_tasks_repo().failed_retry_counts_by_queue()
     retryable_failed_by_queue = {item["queue_name"]: item["count"] for item in failed_retry_counts if item["retry_state"] == "retryable"}
     exhausted_failed_by_queue = {item["queue_name"]: item["count"] for item in failed_retry_counts if item["retry_state"] == "exhausted"}
+    oldest_pending_rows = improvement_tasks_repo().oldest_pending_by_queue()
+    oldest_pending_by_queue = {item["queue_name"]: item["oldest_pending_at"] for item in oldest_pending_rows}
+    queue_names = sorted({item["queue_name"] for item in improvement_queue_counts} | set(oldest_pending_by_queue))
+    queue_health = [
+        {
+            "queue_name": queue_name,
+            "pending_count": pending_by_queue.get(queue_name, 0),
+            "failed_count": failed_by_queue.get(queue_name, 0),
+            "retryable_failed_count": retryable_failed_by_queue.get(queue_name, 0),
+            "exhausted_failed_count": exhausted_failed_by_queue.get(queue_name, 0),
+            "oldest_pending_at": oldest_pending_by_queue.get(queue_name),
+        }
+        for queue_name in queue_names
+    ]
     return {
         "ok": True,
         "service": settings.service_name,
@@ -103,6 +117,8 @@ def diagnostics() -> dict:
                 "failed_retry_counts": failed_retry_counts,
                 "retryable_failed_by_queue": retryable_failed_by_queue,
                 "exhausted_failed_by_queue": exhausted_failed_by_queue,
+                "oldest_pending_by_queue": oldest_pending_by_queue,
+                "queue_health": queue_health,
                 "pending_promotion_count": pending_promotion_count,
             },
             "audit": {

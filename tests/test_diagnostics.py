@@ -149,3 +149,31 @@ def test_diagnostics_reports_retryable_and_exhausted_failed_queue_pressure(diagn
     assert improvement["failed_by_queue"]["asset"] == 2
     assert improvement["retryable_failed_by_queue"]["asset"] == 1
     assert improvement["exhausted_failed_by_queue"]["asset"] == 1
+
+
+def test_diagnostics_reports_oldest_pending_queue_health(diagnostics_env):
+    first = create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="reindex_asset",
+            target_domain="asset",
+            target_id="asset-diag-oldest-1",
+            queue_name="asset",
+            created_by="diag-test",
+        )
+    )
+    second = create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="refresh_asset_artifacts",
+            target_domain="asset",
+            target_id="asset-diag-oldest-2",
+            queue_name="asset",
+            created_by="diag-test",
+        )
+    )
+
+    improvement = diagnostics()["governance"]["improvement"]
+
+    assert improvement["oldest_pending_by_queue"]["asset"] == min(first["created_at"], second["created_at"])
+    asset_health = next(item for item in improvement["queue_health"] if item["queue_name"] == "asset")
+    assert asset_health["pending_count"] == 2
+    assert asset_health["oldest_pending_at"] == improvement["oldest_pending_by_queue"]["asset"]

@@ -2225,6 +2225,19 @@ class ImprovementTasksRepo:
             ).fetchall()
         return [{"queue_name": row[0], "retry_state": row[1], "count": row[2]} for row in rows]
 
+    def oldest_pending_by_queue(self) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(queue_name, 'default'), min(created_at)
+                from improvement_tasks
+                where status = 'pending'
+                group by coalesce(queue_name, 'default')
+                order by coalesce(queue_name, 'default') asc
+                """
+            ).fetchall()
+        return [{"queue_name": row[0], "oldest_pending_at": row[1]} for row in rows]
+
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         return {
             "id": row[0],

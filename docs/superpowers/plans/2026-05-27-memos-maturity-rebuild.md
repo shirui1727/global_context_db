@@ -1563,3 +1563,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 41: Oldest pending queue diagnostics
+
+Goal: make queue backlog age visible so operators can spot stale pending work without adding Redis or a dashboard.
+
+- [x] Add repo-level `oldest_pending_by_queue` aggregation.
+- [x] Expose `oldest_pending_by_queue` and compact `queue_health` from scheduler status.
+- [x] Expose the same queue health signals from diagnostics improvement governance output.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_diagnostics.py tests\test_scheduler.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

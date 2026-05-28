@@ -200,3 +200,17 @@ def test_scheduler_status_reports_retryable_and_exhausted_failed_by_queue(schedu
     assert status["failed_by_queue"]["asset"] == 2
     assert status["retryable_failed_by_queue"]["asset"] == 1
     assert status["exhausted_failed_by_queue"]["asset"] == 1
+
+
+def test_scheduler_status_reports_oldest_pending_by_queue(scheduler_env):
+    from app.scheduler.service import scheduler_status
+
+    first = _create_task(target_id="asset-oldest-1", queue_name="asset")
+    second = _create_task(target_id="asset-oldest-2", task_kind="refresh_asset_artifacts", queue_name="asset")
+
+    status = scheduler_status()
+
+    assert status["oldest_pending_by_queue"]["asset"] == min(first["created_at"], second["created_at"])
+    asset_health = next(item for item in status["queue_health"] if item["queue_name"] == "asset")
+    assert asset_health["pending_count"] == 2
+    assert asset_health["oldest_pending_at"] == status["oldest_pending_by_queue"]["asset"]
