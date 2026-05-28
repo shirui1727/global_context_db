@@ -92,3 +92,24 @@ def test_diagnostics_reports_scheduler_queue_pressure(diagnostics_env):
     assert any(item["queue_name"] == "memory_hygiene" and item["status"] == "pending" for item in improvement["queue_counts"])
     assert improvement["pending_by_queue"]["asset"] == 1
     assert improvement["pending_by_queue"]["memory_hygiene"] == 1
+
+
+def test_diagnostics_reports_failed_queue_pressure(diagnostics_env):
+    from app.scheduler.service import claim_next_task, fail_task
+
+    create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="reindex_asset",
+            target_domain="asset",
+            target_id="asset-diag-failed-queue",
+            queue_name="asset",
+            created_by="diag-test",
+        )
+    )
+    claimed = claim_next_task(queue_name="asset", worker_id="diag-worker")
+    fail_task(claimed["id"], "diagnostic queue failure", retry_delay_seconds=60)
+
+    improvement = diagnostics()["governance"]["improvement"]
+
+    assert improvement["failed_by_queue"]["asset"] == 1
+    assert any(item["queue_name"] == "asset" and item["status"] == "failed" for item in improvement["queue_counts"])

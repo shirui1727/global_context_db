@@ -169,3 +169,16 @@ def test_scheduler_status_reports_queue_counts(scheduler_env):
     assert any(item["queue_name"] == "memory_hygiene" and item["status"] == "pending" for item in status["queue_counts"])
     assert status["pending_by_queue"]["asset"] == 1
     assert status["pending_by_queue"]["memory_hygiene"] == 1
+
+
+def test_scheduler_status_reports_failed_by_queue(scheduler_env):
+    from app.scheduler.service import claim_next_task, fail_task, scheduler_status
+
+    _create_task(target_id="asset-failed-queue", queue_name="asset")
+    claimed = claim_next_task(queue_name="asset", worker_id="worker-fail")
+    fail_task(claimed["id"], "queue failure", retry_delay_seconds=60)
+
+    status = scheduler_status()
+
+    assert status["failed_by_queue"]["asset"] == 1
+    assert any(item["queue_name"] == "asset" and item["status"] == "failed" for item in status["queue_counts"])

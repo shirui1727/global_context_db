@@ -1521,3 +1521,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 39: Failed queue pressure diagnostics
+
+Goal: make failed improvement work visible by queue so operators can distinguish normal backlog from stuck queue failures without adding a dashboard.
+
+- [x] Add `failed_by_queue` to scheduler status output.
+- [x] Add `failed_by_queue` to diagnostics improvement governance output.
+- [x] Verify both scheduler status and diagnostics expose failed queue pressure.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_diagnostics.py tests\test_scheduler.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

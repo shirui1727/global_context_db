@@ -51,6 +51,7 @@ def diagnostics() -> dict:
     )
     improvement_queue_counts = improvement_tasks_repo().queue_counts()
     pending_by_queue = {item["queue_name"]: item["count"] for item in improvement_queue_counts if item["status"] == "pending"}
+    failed_by_queue = {item["queue_name"]: item["count"] for item in improvement_queue_counts if item["status"] == "failed"}
     return {
         "ok": True,
         "service": settings.service_name,
@@ -95,6 +96,7 @@ def diagnostics() -> dict:
                 "status_counts": improvement_tasks_repo().status_counts(),
                 "queue_counts": improvement_queue_counts,
                 "pending_by_queue": pending_by_queue,
+                "failed_by_queue": failed_by_queue,
                 "pending_promotion_count": pending_promotion_count,
             },
             "audit": {
