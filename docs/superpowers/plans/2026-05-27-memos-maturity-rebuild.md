@@ -1334,3 +1334,22 @@ python -m compileall app tools
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 30: Relation index diagnostics summary
+
+Goal: make the lightweight `memory_relations` index easier to evaluate before deciding whether a dashboard/subgraph is warranted.
+
+- [x] Add relation-index aggregate counts by `relation_kind` in the SQLite repo layer.
+- [x] Expose diagnostics `relation_index.total_count`, `kind_counts`, `sample_count`, and `sample_limit`.
+- [x] Keep diagnostics read-only and preserve the boundary that `memory_relations` is a lightweight SQLite index, not a graph database.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_diagnostics.py tests\test_memory_graph.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+```

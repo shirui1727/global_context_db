@@ -2536,6 +2536,20 @@ class MemoryRelationsRepo:
             rows = conn.execute(query, params).fetchall()
         return [self._decode(row) for row in rows]
 
+    def count_by_kind(self, source_domain: str = "memory") -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select relation_kind, count(*)
+                from memory_relations
+                where source_domain = ?
+                group by relation_kind
+                order by count(*) desc, relation_kind asc
+                """,
+                (source_domain,),
+            ).fetchall()
+        return [{"relation_kind": row[0], "count": row[1]} for row in rows]
+
     def _decode(self, row: sqlite3.Row | tuple) -> dict:
         return {
             "id": row[0],

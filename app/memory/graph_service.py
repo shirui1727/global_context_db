@@ -93,3 +93,17 @@ def build_memory_relation_index(limit: int = 500, created_by: str | None = None)
 
 def list_memory_relations(source_id: str | None = None, limit: int = 100) -> list[dict]:
     return memory_relations_repo().list_by_source(source_domain="memory", source_id=source_id, limit=limit)
+
+
+def memory_relation_index_summary(sample_limit: int = 20) -> dict:
+    kind_count_rows = memory_relations_repo().count_by_kind(source_domain="memory")
+    kind_counts = {row["relation_kind"]: row["count"] for row in kind_count_rows}
+    total_count = sum(kind_counts.values())
+    sample_count = len(list_memory_relations(limit=sample_limit))
+    return {
+        "purpose": "lightweight SQLite relation index; not a graph database",
+        "total_count": total_count,
+        "kind_counts": kind_counts,
+        "sample_count": sample_count,
+        "sample_limit": sample_limit,
+    }
