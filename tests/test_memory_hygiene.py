@@ -123,3 +123,25 @@ def test_memory_hygiene_conflict_proposal_includes_both_memory_snapshots(hygiene
     snapshots = [conflict["review_snapshot"], *conflict["related_snapshots"]]
     assert {snapshot["id"] for snapshot in snapshots} == {left["id"], right["id"]}
     assert all(snapshot["content_preview"] for snapshot in snapshots)
+
+
+def test_memory_hygiene_reenqueue_does_not_reopen_done_tasks(hygiene_env):
+    created = add_memory(
+        MemoryCreate(
+            content="Completed hygiene task should not be reopened.",
+            tags=["hygiene-idempotent"],
+            agent_id="codex",
+            trust_level="agent_inferred",
+        )
+    )["memory"]
+    enqueue_memory_hygiene(limit=10, created_by="hygiene-test")
+    first_run = run_pending_tasks(limit=5, queue_name="memory_hygiene", worker_id="hygiene-worker")
+
+    reenqueued = enqueue_memory_hygiene(limit=10, created_by="hygiene-test")
+    task = next(task for task in improvement_tasks_repo().list_recent(limit=10, target_domain="memory") if task["target_id"] == created["id"])
+    second_run = run_pending_tasks(limit=5, queue_name="memory_hygiene", worker_id="hygiene-worker-2")
+
+    assert first_run["done"] == 1
+    assert reenqueued["created_count"] == 0
+    assert task["status"] == "done"
+    assert second_run["claimed"] == 0

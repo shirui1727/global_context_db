@@ -1437,3 +1437,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 35: Hygiene enqueue idempotency after review
+
+Goal: prevent periodic hygiene enqueue from reopening already completed proposal-review tasks for the same memory issue.
+
+- [x] Skip creating a hygiene task when a matching `done` task already exists for the same `task_kind`, `target_domain`, and `target_id`.
+- [x] Return `skipped_existing_count` and `skipped_existing` from `enqueue_memory_hygiene` for operator visibility.
+- [x] Verify re-enqueue after scheduler completion does not create a new pending task or rerun the completed review.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_hygiene.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

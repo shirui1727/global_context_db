@@ -28,6 +28,7 @@ from app.storage.repo import (
     memory_lifecycle_events_repo,
     memory_promotion_proposals_repo,
     memory_versions_repo,
+    improvement_tasks_repo,
     session_events_repo,
 )
 from app.storage.vector_store import delete_item, search_items, upsert_items
@@ -583,14 +584,20 @@ def enqueue_memory_quality_improvements(limit: int = 100, created_by: str | None
 def enqueue_memory_hygiene(limit: int = 100, created_by: str | None = None, queue_name: str = "memory_hygiene") -> dict:
     report = memory_quality_report(limit)
     tasks = []
+    skipped_existing = []
     actor = created_by or "memory_hygiene"
     for item in report["low_evidence"]:
+        task_kind = "verify_memory_evidence"
+        target_id = item["memory_id"]
+        if _has_completed_hygiene_task(task_kind, "memory", target_id):
+            skipped_existing.append({"task_kind": task_kind, "target_domain": "memory", "target_id": target_id})
+            continue
         tasks.append(
             create_improvement_task(
                 ImprovementTaskCreate(
-                    task_kind="verify_memory_evidence",
+                    task_kind=task_kind,
                     target_domain="memory",
-                    target_id=item["memory_id"],
+                    target_id=target_id,
                     priority=70,
                     reason=item["reason"],
                     created_by=actor,
@@ -600,12 +607,17 @@ def enqueue_memory_hygiene(limit: int = 100, created_by: str | None = None, queu
             )
         )
     for item in report["stale"]:
+        task_kind = "refresh_stale_memory"
+        target_id = item["memory_id"]
+        if _has_completed_hygiene_task(task_kind, "memory", target_id):
+            skipped_existing.append({"task_kind": task_kind, "target_domain": "memory", "target_id": target_id})
+            continue
         tasks.append(
             create_improvement_task(
                 ImprovementTaskCreate(
-                    task_kind="refresh_stale_memory",
+                    task_kind=task_kind,
                     target_domain="memory",
-                    target_id=item["memory_id"],
+                    target_id=target_id,
                     priority=75,
                     reason="; ".join(item["reasons"]),
                     created_by=actor,
@@ -615,11 +627,15 @@ def enqueue_memory_hygiene(limit: int = 100, created_by: str | None = None, queu
             )
         )
     for item in report["conflicts"]:
+        task_kind = "resolve_memory_conflict"
         target_id = sha256("|".join(item["memory_ids"]).encode("utf-8")).hexdigest()
+        if _has_completed_hygiene_task(task_kind, "memory", target_id):
+            skipped_existing.append({"task_kind": task_kind, "target_domain": "memory", "target_id": target_id})
+            continue
         tasks.append(
             create_improvement_task(
                 ImprovementTaskCreate(
-                    task_kind="resolve_memory_conflict",
+                    task_kind=task_kind,
                     target_domain="memory",
                     target_id=target_id,
                     priority=85,
@@ -634,9 +650,28 @@ def enqueue_memory_hygiene(limit: int = 100, created_by: str | None = None, queu
         "memory_hygiene.enqueued",
         "memory_hygiene",
         actor,
-        {"created_count": len(tasks), "queue_name": queue_name, "summary": report["summary"]},
+        {"created_count": len(tasks), "skipped_existing_count": len(skipped_existing), "queue_name": queue_name, "summary": report["summary"]},
     )
-    return {"created_count": len(tasks), "queue_name": queue_name, "tasks": tasks, "quality": report}
+    return {
+        "created_count": len(tasks),
+        "skipped_existing_count": len(skipped_existing),
+        "queue_name": queue_name,
+        "tasks": tasks,
+        "skipped_existing": skipped_existing,
+        "quality": report,
+    }
+
+
+def _has_completed_hygiene_task(task_kind: str, target_domain: str, target_id: str) -> bool:
+    return bool(
+        improvement_tasks_repo().list_recent(
+            limit=1,
+            status="done",
+            task_kind=task_kind,
+            target_domain=target_domain,
+            target_id=target_id,
+        )
+    )
 
 
 def _count_by(rows: list[dict], field: str, fallback: str) -> dict[str, int]:
