@@ -45,6 +45,9 @@ PATCH /memory-promotions/{proposal_id}
 POST /memory-promotions/{proposal_id}/review
 GET /memories/quality
 POST /memories/quality/enqueue-improvements
+POST /memories/hygiene/enqueue
+POST /memories/relations/rebuild
+GET /memories/relations
 ```
 
 MCP：
@@ -62,6 +65,9 @@ gcd_list_memory_promotions
 gcd_review_memory_promotion
 gcd_memory_quality_report
 gcd_enqueue_memory_quality_improvements
+gcd_enqueue_memory_hygiene
+gcd_build_memory_relation_index
+gcd_list_memory_relations
 ```
 
 长期 memory 不应该直接来自 session 流水。推荐流程：
@@ -99,7 +105,7 @@ stale -> refresh_stale_memory
 conflicts -> resolve_memory_conflict
 ```
 
-这些任务默认只排队，不自动修改记忆。
+这些任务默认只排队，不自动修改记忆。`/memories/hygiene/enqueue` 会把同类候选放入 `memory_hygiene` 队列；scheduler 执行后只返回 review proposal，不直接改写正式 memory。`memory_relations` 是轻量 SQLite 关系索引，不是完整图数据库。当前边类型：shared_tag / supported_by / duplicate_candidate。
 
 ### document
 
@@ -422,7 +428,7 @@ v0.3 不承诺：
 - 直接扫描 NAS 文件系统。
 - 自动 OCR/ASR/关键帧生成。
 - 自动 LLM 总结并覆盖长期记忆。
-- 完整知识图谱。
+- 完整知识图谱或独立 graph database。当前只提供 SQLite `memory_relations` 关系索引。
 - 复杂多租户权限系统。
 
 ## 验收

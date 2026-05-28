@@ -240,17 +240,23 @@ conflicted
 8. Reader evidence/provenance/span 规范。
 9. Reader fine mode 非 LLM 骨架。
 
-### 再下一轮
+### 已补到 Task 28
 
-10. Feedback action proposal 非 LLM 骨架。
-11. Hook/plugin runtime 非重依赖骨架。
-12. Hook runtime domain event emission.
-13. LLM feedback action proposal.
-14. Redis scheduler.
-15. dashboard / graph memory.
-16. readable/writable cube strategy. (readable alias + memory/asset/remember write routing done)
-17. cube snapshot/export/import. (portable payload done)
+10. Feedback action proposal 非 LLM 骨架。（已完成 deterministic proposal）
+11. Hook/plugin runtime 非重依赖骨架。（已完成轻量事件队列）
+12. Hook runtime domain event emission。（已完成 domain services emit）
+13. readable/writable cube strategy。（已完成 readable alias + memory/asset/remember write routing）
+14. cube snapshot/export/import。（已完成 portable payload）
+15. diagnostics / retrieval eval / media worker / MCP audit P0 hardening。（已完成）
+16. memory hygiene queue。（已完成 proposal-only 执行）
+17. lightweight memory relation index。（已完成 SQLite relation index，非 graph DB）
 
+### 后续触发条件
+
+18. LLM feedback action proposal：等 deterministic proposal 和手动 apply 有实际使用样本后再接。
+19. Redis scheduler：等 NAS 单机 SQLite 队列出现多 worker/远程并发压力后再做。
+20. dashboard/subgraph：等 `memory_relations` 数据积累并证明有用后再做。
+21. User manager / ACL：等真实多用户共享需求出现后再做。
 ---
 
 ## 6. 每阶段验证
@@ -273,6 +279,6 @@ git push
 
 ---
 
-## 7. 下一步明确任务
+## 7. Current status
 
-当前进入 **Task 11: Hook/plugin runtime 非重依赖骨架**：只做 hook 订阅、事件入队、列表查询和人工标记 dispatched；不执行任意外部代码，不做插件市场。
+Through Task 28, deterministic proposal, hook runtime, cube strategy, snapshot/export/import, retrieval eval, media worker adapters, MCP audit, memory hygiene queue, and lightweight relation index have landed. Do not default to Redis, LLM planner, dashboard/subgraph, or ACL; continue with verification, documentation, diagnostics, and small hardening slices first.

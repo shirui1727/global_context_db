@@ -1313,3 +1313,24 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\relea
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 29: Architecture docs catch-up after v0.3.9 hardening
+
+Goal: make the human-facing architecture and absorption docs reflect the actually implemented P0/P1/P2 hardening work through Task 28, so future continuation does not chase already-completed items.
+
+- [x] Update `docs/current-architecture-v0.3.md` with hygiene and relation-index REST/MCP surfaces, safety boundaries, non-goals, and acceptance checks.
+- [x] Update `docs/frontier-memory-absorption-v0.3.md` with v0.3.9 absorbed work and move completed P0/P1/P2 items out of pending lists.
+- [x] Update `docs/memos-borrowing-development-plan.md` so the next-wave list reflects completed deterministic proposal, hooks, cube strategy, hygiene, and lightweight relation index work.
+- [x] Preserve future trigger conditions for LLM planner, Redis scheduler, dashboard/subgraph, and User manager/ACL instead of presenting them as current requirements.
+
+Verification:
+
+```powershell
+python -c "from pathlib import Path; [p.read_text(encoding='utf-8') for p in Path('docs').rglob('*.md')]"
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```

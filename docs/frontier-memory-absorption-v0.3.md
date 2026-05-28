@@ -163,29 +163,30 @@ Global Context DB 是 NAS 上的共享记忆和资产控制面，MCP 写入工�
 - `media_manifest_worker.py` 现在也支持 `--post-url` / `--api-key`，可以直接把 scan-run 或 analysis-manifest 推送到 GCD REST。
 - NAS 打包和验包脚本已要求包含该 worker。
 
-### P0
+## v0.3.9 absorbed
 
-- 继续收紧 `format=raw|handoff|brief` 的行为，目前字段已预留但还没有细分输出模板。
-- 给 MCP 高风险写入工具加二次确认或更明确的 audit action。
-- 将 retrieval eval 扩展成 20-50 条项目固定用例，并纳入 NAS 验收脚本。
-- 给 `tools/media_manifest_worker.py` 增加真实 ffprobe/ffmpeg 探测模式和可选 OCR/ASR adapter。
+- `format=raw|handoff|brief` is tightened: `brief` suppresses heavy arrays and returns compact counts; unknown formats are rejected.
+- High-risk MCP write tools now emit `mcp.high_risk_write` audit actions, covering memory update/delete, feedback apply, promotion review, asset update, and similar paths.
+- `tools/retrieval_eval_fixture.py` provides 20 fixed project cases across memory/document/asset/session and is wired into `/retrieval/eval`, `gcd_run_retrieval_eval`, and NAS package verification.
+- `tools/media_manifest_worker.py` now supports `--ffprobe`, `--ocr-text-file`, and `--asr-text-file` adapters. Heavy media processing remains outside GCD; GCD registers manifests and artifacts only.
+- `/diagnostics` now exposes governance signals such as pending promotions and audit write/high-risk counts.
+- `memory_evidence.source_span.metadata` can carry provenance fields such as `document_chunk_id`, `asset_artifact_id`, `session_event_id`, selector, and quote_hash.
+- `POST /memories/hygiene/enqueue` and `gcd_enqueue_memory_hygiene` enqueue candidates into `memory_hygiene`; scheduler output is review proposals only and does not mutate formal memory automatically.
+- Lightweight SQLite `memory_relations` index is available via REST/MCP. Current edge types are `shared_tag`, `supported_by`, and `duplicate_candidate`. This is not a graph database and does not replace the SQLite + LanceDB backbone.
 
-### P1
+## Future trigger conditions
 
-- `/diagnostics` 增加“未处理提升任务”和“高风险写入工具调用”统计。
-- 给 memory evidence 增加更细的 source span，例如 document chunk offset、asset artifact id、session event quote hash。
+- Redis Streams: introduce only after real multi-worker or remote concurrency pressure appears.
+- LLM planner: introduce only after manual feedback apply and deterministic proposals have usage samples.
+- Dashboard/subgraph: build only after `memory_relations` data proves useful.
+- User manager / ACL: add only after real multi-user sharing needs appear.
 
-### P2
+## Current conclusion
 
-- 做 memory hygiene：过期、冲突、重复、低 trust 的长期 memory 定期进入 improvement queue。
-- 探索轻量 graph，但只做关系索引，不替换现有 SQLite + LanceDB 主干。
-
-## 当前结论
-
-继续优化的方向不是“更多数据都塞进去”，而是：
+The next direction is not stuffing in more data, but keeping this loop tight:
 
 ```text
-过程完整保存 -> 确定性接手 -> 有证据提升 -> 分域检索 -> 可评测命中
+complete process capture -> deterministic handoff -> evidence-based promotion -> domain-aware retrieval -> measurable recall
 ```
 
-这条路线比引入大型记忆平台更适合当前 NAS 实验版本。
+That path fits the current NAS experiment better than importing a large memory platform wholesale.
