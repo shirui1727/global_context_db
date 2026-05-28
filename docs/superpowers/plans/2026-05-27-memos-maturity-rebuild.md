@@ -1500,3 +1500,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 38: Diagnostics scheduler queue pressure
+
+Goal: surface scheduler queue pressure in `/diagnostics` so operators can see improvement backlog by queue without opening a separate dashboard or adding Redis.
+
+- [x] Add improvement `queue_counts` to diagnostics governance output.
+- [x] Add improvement `pending_by_queue` to highlight pending backlog for queues such as `asset` and `memory_hygiene`.
+- [x] Verify diagnostics reports queue pressure for multiple queues.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_diagnostics.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

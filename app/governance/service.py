@@ -49,6 +49,8 @@ def diagnostics() -> dict:
     high_risk_write_action_count = sum(
         item["count"] for item in write_action_counts if item.get("action") in HIGH_RISK_WRITE_ACTIONS
     )
+    improvement_queue_counts = improvement_tasks_repo().queue_counts()
+    pending_by_queue = {item["queue_name"]: item["count"] for item in improvement_queue_counts if item["status"] == "pending"}
     return {
         "ok": True,
         "service": settings.service_name,
@@ -91,6 +93,8 @@ def diagnostics() -> dict:
                 "domain": "improvement",
                 "purpose": "deterministic task queue for rebuild, reindex, recovery, and promotion work",
                 "status_counts": improvement_tasks_repo().status_counts(),
+                "queue_counts": improvement_queue_counts,
+                "pending_by_queue": pending_by_queue,
                 "pending_promotion_count": pending_promotion_count,
             },
             "audit": {

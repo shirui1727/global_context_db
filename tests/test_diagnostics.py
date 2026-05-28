@@ -3,11 +3,12 @@ from pathlib import Path
 import pytest
 
 from app.core.config import settings
-from app.core.schemas import MemoryCreate, MemoryPromotionCreate, MemoryUpdate
+from app.core.schemas import ImprovementTaskCreate, MemoryCreate, MemoryPromotionCreate, MemoryUpdate
 from app.governance.service import diagnostics
 from app.memory.graph_service import build_memory_relation_index
 from app.memory.service import add_memory, create_memory_promotion, update_memory
 from app.storage.bootstrap import bootstrap, reset_bootstrap
+from app.improvements.service import create_improvement_task
 
 
 @pytest.fixture()
@@ -63,3 +64,31 @@ def test_diagnostics_reports_relation_index_kind_counts(diagnostics_env):
     assert relation_index["kind_counts"]["duplicate_candidate"] >= 2
     assert relation_index["sample_count"] <= relation_index["total_count"]
     assert relation_index["sample_limit"] == 20
+
+
+def test_diagnostics_reports_scheduler_queue_pressure(diagnostics_env):
+    create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="reindex_asset",
+            target_domain="asset",
+            target_id="asset-diag-queue",
+            queue_name="asset",
+            created_by="diag-test",
+        )
+    )
+    create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="verify_memory_evidence",
+            target_domain="memory",
+            target_id="memory-diag-queue",
+            queue_name="memory_hygiene",
+            created_by="diag-test",
+        )
+    )
+
+    improvement = diagnostics()["governance"]["improvement"]
+
+    assert any(item["queue_name"] == "asset" and item["status"] == "pending" for item in improvement["queue_counts"])
+    assert any(item["queue_name"] == "memory_hygiene" and item["status"] == "pending" for item in improvement["queue_counts"])
+    assert improvement["pending_by_queue"]["asset"] == 1
+    assert improvement["pending_by_queue"]["memory_hygiene"] == 1
