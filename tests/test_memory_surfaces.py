@@ -4,9 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
-from app.core.schemas import MemoryCreate, ReaderItem
+from app.core.schemas import MemoryCreate, MemoryEvidenceCreate, ReaderItem
 from app.main import app
-from app.memory.service import add_memory
+from app.memory.service import add_memory, add_memory_evidence
 from app.storage.bootstrap import bootstrap, reset_bootstrap
 
 
@@ -122,3 +122,37 @@ def test_rest_and_mcp_expose_fine_reader_candidate_creation(memory_surface_env):
     assert rest_response.json()["candidates"][0]["metadata"]["fine"]["memory_type"] == "decision"
     assert mcp_result["created_count"] == 1
     assert mcp_result["candidates"][0]["metadata"]["fine"]["memory_type"] == "preference"
+
+
+def test_rest_exposes_memory_relation_index_rebuild_and_list(memory_surface_env):
+    client = TestClient(app)
+    first = add_memory(MemoryCreate(content="REST relation surface one", tags=["surface-relation"], agent_id="codex"))["memory"]
+    second = add_memory(MemoryCreate(content="REST relation surface two", tags=["surface-relation"], agent_id="codex"))["memory"]
+    add_memory_evidence(
+        first["id"],
+        MemoryEvidenceCreate(source_domain="session_event", source_id="event-rest-relation", quote="surface relation evidence"),
+    )
+
+    rebuild_response = client.post("/memories/relations/rebuild", params={"limit": 100, "created_by": "rest-test"})
+    list_response = client.get("/memories/relations", params={"source_id": first["id"], "limit": 20})
+
+    assert rebuild_response.status_code == 200
+    assert rebuild_response.json()["created_count"] >= 2
+    assert list_response.status_code == 200
+    relations = list_response.json()
+    assert any(edge["relation_kind"] == "shared_tag" and edge["target_id"] == second["id"] for edge in relations)
+    assert any(edge["relation_kind"] == "supported_by" and edge["target_id"] == "event-rest-relation" for edge in relations)
+
+
+def test_mcp_exposes_memory_relation_index_rebuild_and_list(memory_surface_env):
+    from app.mcp_server import gcd_build_memory_relation_index, gcd_list_memory_relations
+
+    first = add_memory(MemoryCreate(content="MCP relation surface one", tags=["mcp-relation"], agent_id="codex"))["memory"]
+    second = add_memory(MemoryCreate(content="MCP relation surface two", tags=["mcp-relation"], agent_id="codex"))["memory"]
+
+    rebuilt = gcd_build_memory_relation_index(limit=100, created_by="mcp-test")
+    relations = gcd_list_memory_relations(source_id=first["id"], limit=20)
+
+    assert rebuilt["created_count"] >= 2
+    assert any(edge["relation_kind"] == "shared_tag" and edge["target_id"] == second["id"] for edge in relations)
+    assert all(edge["source_id"] == first["id"] for edge in relations)

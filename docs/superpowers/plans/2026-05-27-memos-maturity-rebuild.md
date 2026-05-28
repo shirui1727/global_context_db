@@ -1353,3 +1353,24 @@ python -m pytest -q
 python -m compileall app tools
 git diff --check
 ```
+
+---
+
+## Task 31: Relation index REST/MCP surface verification
+
+Goal: verify the relation-index surfaces end-to-end so the lightweight graph work is usable through the same REST/MCP paths as the rest of GCD.
+
+- [x] Add REST surface coverage for `/memories/relations/rebuild` and `/memories/relations`.
+- [x] Add MCP surface coverage for `gcd_build_memory_relation_index` and `gcd_list_memory_relations`.
+- [x] Verify relation edges include shared-tag and evidence-backed `supported_by` paths without adding graph DB or dashboard dependencies.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_surfaces.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```
