@@ -1153,3 +1153,26 @@ python -m compileall app tools
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 22: Retrieval eval fixture for NAS acceptance
+
+Goal: turn retrieval eval from an ad hoc API into a reusable NAS acceptance fixture with 20+ project-oriented cases covering memory, document, asset, and session domains.
+
+- [x] RED test: project retrieval eval fixture has at least 20 cases and covers memory/document/asset/session domains.
+- [x] Add `tools/retrieval_eval_fixture.py` to emit the default project fixture or normalize a JSON fixture file.
+- [x] Keep cases as plain `RetrievalEvalCase`-compatible dictionaries so REST/MCP callers can submit them directly to `/retrieval/eval` / `gcd_run_retrieval_eval`.
+- [x] Include the fixture tool in NAS package verification required entries.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_retrieval_eval_fixture.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+git status --short
+```

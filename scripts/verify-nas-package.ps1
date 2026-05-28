@@ -17,7 +17,8 @@ try {
         "global_context_db/app/assets/service.py",
         "global_context_db/app/core/config.py",
         "global_context_db/docker-compose.yaml",
-        "global_context_db/tools/media_manifest_worker.py"
+        "global_context_db/tools/media_manifest_worker.py",
+        "global_context_db/tools/retrieval_eval_fixture.py"
     )
     foreach ($Item in $Required) {
         if ($Names -notcontains $Item) {
