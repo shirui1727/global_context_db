@@ -580,6 +580,65 @@ def enqueue_memory_quality_improvements(limit: int = 100, created_by: str | None
     return {"created_count": len(tasks), "tasks": tasks, "quality": report}
 
 
+def enqueue_memory_hygiene(limit: int = 100, created_by: str | None = None, queue_name: str = "memory_hygiene") -> dict:
+    report = memory_quality_report(limit)
+    tasks = []
+    actor = created_by or "memory_hygiene"
+    for item in report["low_evidence"]:
+        tasks.append(
+            create_improvement_task(
+                ImprovementTaskCreate(
+                    task_kind="verify_memory_evidence",
+                    target_domain="memory",
+                    target_id=item["memory_id"],
+                    priority=70,
+                    reason=item["reason"],
+                    created_by=actor,
+                    queue_name=queue_name,
+                    metadata={"quality_category": "low_evidence", "candidate": item, "hygiene": True},
+                )
+            )
+        )
+    for item in report["stale"]:
+        tasks.append(
+            create_improvement_task(
+                ImprovementTaskCreate(
+                    task_kind="refresh_stale_memory",
+                    target_domain="memory",
+                    target_id=item["memory_id"],
+                    priority=75,
+                    reason="; ".join(item["reasons"]),
+                    created_by=actor,
+                    queue_name=queue_name,
+                    metadata={"quality_category": "stale", "candidate": item, "hygiene": True},
+                )
+            )
+        )
+    for item in report["conflicts"]:
+        target_id = sha256("|".join(item["memory_ids"]).encode("utf-8")).hexdigest()
+        tasks.append(
+            create_improvement_task(
+                ImprovementTaskCreate(
+                    task_kind="resolve_memory_conflict",
+                    target_domain="memory",
+                    target_id=target_id,
+                    priority=85,
+                    reason=item["reason"],
+                    created_by=actor,
+                    queue_name=queue_name,
+                    metadata={"quality_category": "conflict", "candidate": item, "hygiene": True},
+                )
+            )
+        )
+    _audit(
+        "memory_hygiene.enqueued",
+        "memory_hygiene",
+        actor,
+        {"created_count": len(tasks), "queue_name": queue_name, "summary": report["summary"]},
+    )
+    return {"created_count": len(tasks), "queue_name": queue_name, "tasks": tasks, "quality": report}
+
+
 def _count_by(rows: list[dict], field: str, fallback: str) -> dict[str, int]:
     return dict(Counter(row.get(field) or fallback for row in rows))
 

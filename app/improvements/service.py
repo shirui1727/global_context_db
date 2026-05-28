@@ -193,15 +193,40 @@ def _execute_task(task: dict, payload: ImproveRequest) -> dict:
     if task["task_kind"] == "promote_session_memory":
         return _execute_promote_session_memory(task, payload)
     if task["task_kind"] in {
-        "refresh_asset_artifacts",
-        "resolve_missing_asset",
-        "verify_untrusted_memory",
         "verify_memory_evidence",
         "refresh_stale_memory",
         "resolve_memory_conflict",
     }:
+        return _execute_memory_hygiene_task(task, payload)
+    if task["task_kind"] in {
+        "refresh_asset_artifacts",
+        "resolve_missing_asset",
+        "verify_untrusted_memory",
+    }:
         return {"status": "skipped", "reason": "deterministic executor not implemented in v0.3 yet"}
     raise ValueError(f"unsupported task kind: {task['task_kind']}")
+
+
+def _execute_memory_hygiene_task(task: dict, payload: ImproveRequest) -> dict:
+    metadata = task.get("metadata") or {}
+    candidate = metadata.get("candidate") or {}
+    task_kind = task["task_kind"]
+    recommended = {
+        "verify_memory_evidence": "attach_evidence_or_verify",
+        "refresh_stale_memory": "review_and_refresh_or_archive",
+        "resolve_memory_conflict": "compare_conflicting_memories",
+    }.get(task_kind, "manual_review")
+    return {
+        "status": "proposal",
+        "task_kind": task_kind,
+        "target_domain": task.get("target_domain"),
+        "target_id": task.get("target_id"),
+        "recommended_action": recommended,
+        "reason": task.get("reason") or "",
+        "quality_category": metadata.get("quality_category"),
+        "candidate": candidate,
+        "executor": payload.created_by or "scheduler",
+    }
 
 
 def _execute_summarize_session(task: dict, payload: ImproveRequest) -> dict:

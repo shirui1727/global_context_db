@@ -85,6 +85,7 @@ from app.memory.service import (
     list_memories,
     list_memory_versions,
     enqueue_memory_quality_improvements,
+    enqueue_memory_hygiene,
     memory_quality_report,
     review_memory_promotion,
     search_memory,
@@ -546,6 +547,19 @@ def gcd_enqueue_memory_quality_improvements(
     bootstrap(settings)
     require_mcp_write_key(api_key)
     return enqueue_memory_quality_improvements(limit=limit, created_by=created_by)
+
+
+@mcp.tool()
+def gcd_enqueue_memory_hygiene(
+    limit: int = 100,
+    created_by: str | None = None,
+    queue_name: str = "memory_hygiene",
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Queue periodic hygiene tasks for low-evidence, stale, or conflicting memories."""
+    bootstrap(settings)
+    require_mcp_write_key(api_key)
+    return enqueue_memory_hygiene(limit=limit, created_by=created_by, queue_name=queue_name)
 
 
 @mcp.tool()

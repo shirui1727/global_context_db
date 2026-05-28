@@ -1243,3 +1243,27 @@ python -m compileall app tools
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 26: Memory hygiene queue
+
+Goal: turn memory quality diagnostics into a repeatable hygiene queue so expired, conflicting, duplicate, or low-trust memories can be reviewed through scheduler tasks instead of staying as one-off reports.
+
+- [x] RED test: `enqueue_memory_hygiene()` creates memory-quality tasks on `queue_name=memory_hygiene`.
+- [x] RED test: scheduler execution of hygiene tasks returns deterministic review proposals rather than mutating formal memories automatically.
+- [x] Add `enqueue_memory_hygiene()` service plus REST `/memories/hygiene/enqueue` and MCP `gcd_enqueue_memory_hygiene` entrypoints.
+- [x] Add deterministic executor outputs for `verify_memory_evidence`, `refresh_stale_memory`, and `resolve_memory_conflict`.
+- [x] Preserve safety: hygiene executor proposes review actions only; it does not auto-edit or archive memories.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_hygiene.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+git status --short
+```

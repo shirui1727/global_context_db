@@ -105,6 +105,7 @@ from app.memory.service import (
     list_memories,
     list_memory_versions,
     enqueue_memory_quality_improvements,
+    enqueue_memory_hygiene,
     memory_quality_report,
     review_memory_promotion,
     search_memory,
@@ -973,6 +974,11 @@ def memories_quality(limit: int = 100) -> dict:
 @router.post("/memories/quality/enqueue-improvements", dependencies=[Depends(require_api_key)])
 def memories_quality_enqueue(limit: int = 100, created_by: str | None = None) -> dict:
     return enqueue_memory_quality_improvements(limit=limit, created_by=created_by)
+
+
+@router.post("/memories/hygiene/enqueue", dependencies=[Depends(require_api_key)])
+def memories_hygiene_enqueue(limit: int = 100, created_by: str | None = None, queue_name: str = "memory_hygiene") -> dict:
+    return enqueue_memory_hygiene(limit=limit, created_by=created_by, queue_name=queue_name)
 
 
 @router.post("/memory-candidates", dependencies=[Depends(require_api_key)])
