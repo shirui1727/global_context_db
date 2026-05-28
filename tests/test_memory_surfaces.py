@@ -4,7 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
-from app.core.schemas import MemoryCreate, MemoryEvidenceCreate, ReaderItem
+from app.core.schemas import ImprovementTaskCreate, MemoryCreate, MemoryEvidenceCreate, ReaderItem
+from app.improvements.service import create_improvement_task
 from app.main import app
 from app.memory.service import add_memory, add_memory_evidence
 from app.storage.bootstrap import bootstrap, reset_bootstrap
@@ -204,3 +205,46 @@ def test_mcp_exposes_memory_hygiene_enqueue_and_scheduler_review_snapshot(memory
     assert proposal["auto_mutation"] is False
     assert proposal["review_snapshot"]["id"] == created["id"]
     assert proposal["affected_memory_ids"] == [created["id"]]
+
+
+def test_rest_exposes_scheduler_queue_health(memory_surface_env):
+    client = TestClient(app)
+    create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="reindex_asset",
+            target_domain="asset",
+            target_id="asset-rest-status",
+            queue_name="asset",
+            created_by="rest-status",
+        )
+    )
+
+    response = client.get("/scheduler/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pending_by_queue"]["asset"] == 1
+    asset_health = next(item for item in body["queue_health"] if item["queue_name"] == "asset")
+    assert asset_health["pending_count"] == 1
+    assert asset_health["oldest_pending_at"] == body["oldest_pending_by_queue"]["asset"]
+
+
+def test_mcp_exposes_scheduler_queue_health(memory_surface_env):
+    from app.mcp_server import gcd_scheduler_status
+
+    create_improvement_task(
+        ImprovementTaskCreate(
+            task_kind="verify_memory_evidence",
+            target_domain="memory",
+            target_id="memory-mcp-status",
+            queue_name="memory_hygiene",
+            created_by="mcp-status",
+        )
+    )
+
+    status = gcd_scheduler_status()
+
+    assert status["pending_by_queue"]["memory_hygiene"] == 1
+    hygiene_health = next(item for item in status["queue_health"] if item["queue_name"] == "memory_hygiene")
+    assert hygiene_health["pending_count"] == 1
+    assert hygiene_health["oldest_pending_at"] == status["oldest_pending_by_queue"]["memory_hygiene"]

@@ -1584,3 +1584,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 42: Scheduler queue-health surface verification
+
+Goal: verify the queue-health diagnostics added to scheduler status are available through external REST and MCP surfaces.
+
+- [x] Add REST coverage for `GET /scheduler/status` returning `pending_by_queue`, `oldest_pending_by_queue`, and `queue_health`.
+- [x] Add MCP coverage for `gcd_scheduler_status` returning the same queue-health fields.
+- [x] Keep this as surface verification only; no Redis, dashboard, or new worker runtime is introduced.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_surfaces.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```
