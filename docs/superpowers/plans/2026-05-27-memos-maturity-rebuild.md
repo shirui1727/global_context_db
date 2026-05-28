@@ -1395,3 +1395,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 33: Hygiene REST/MCP review-surface verification
+
+Goal: verify that the memory hygiene queue and scheduler proposal output are usable through external REST/MCP surfaces, including the review snapshots added in Task 32.
+
+- [x] Add REST surface coverage for `/memories/hygiene/enqueue` followed by `/scheduler/run-pending` on `memory_hygiene`.
+- [x] Add MCP surface coverage for `gcd_enqueue_memory_hygiene` followed by `gcd_scheduler_run_pending`.
+- [x] Verify external callers receive proposal-only output with `auto_mutation=false`, `affected_memory_ids`, and `review_snapshot`.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_surfaces.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

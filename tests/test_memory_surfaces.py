@@ -156,3 +156,51 @@ def test_mcp_exposes_memory_relation_index_rebuild_and_list(memory_surface_env):
     assert rebuilt["created_count"] >= 2
     assert any(edge["relation_kind"] == "shared_tag" and edge["target_id"] == second["id"] for edge in relations)
     assert all(edge["source_id"] == first["id"] for edge in relations)
+
+
+def test_rest_exposes_memory_hygiene_enqueue_and_scheduler_review_snapshot(memory_surface_env):
+    client = TestClient(app)
+    created = add_memory(
+        MemoryCreate(
+            content="REST hygiene surface should return review snapshot.",
+            tags=["rest-hygiene"],
+            agent_id="codex",
+            trust_level="agent_inferred",
+        )
+    )["memory"]
+
+    enqueue_response = client.post("/memories/hygiene/enqueue", params={"limit": 10, "created_by": "rest-hygiene"})
+    run_response = client.post(
+        "/scheduler/run-pending",
+        params={"limit": 5, "queue_name": "memory_hygiene", "worker_id": "rest-hygiene-worker"},
+    )
+
+    assert enqueue_response.status_code == 200
+    assert enqueue_response.json()["queue_name"] == "memory_hygiene"
+    assert run_response.status_code == 200
+    proposal = next(item["result"] for item in run_response.json()["tasks"] if item["task"]["target_id"] == created["id"])
+    assert proposal["auto_mutation"] is False
+    assert proposal["review_snapshot"]["id"] == created["id"]
+    assert proposal["review_snapshot"]["trust_level"] == "agent_inferred"
+
+
+def test_mcp_exposes_memory_hygiene_enqueue_and_scheduler_review_snapshot(memory_surface_env):
+    from app.mcp_server import gcd_enqueue_memory_hygiene, gcd_scheduler_run_pending
+
+    created = add_memory(
+        MemoryCreate(
+            content="MCP hygiene surface should return review snapshot.",
+            tags=["mcp-hygiene"],
+            agent_id="codex",
+            trust_level="agent_inferred",
+        )
+    )["memory"]
+
+    enqueued = gcd_enqueue_memory_hygiene(limit=10, created_by="mcp-hygiene")
+    result = gcd_scheduler_run_pending(limit=5, queue_name="memory_hygiene", worker_id="mcp-hygiene-worker")
+
+    assert enqueued["queue_name"] == "memory_hygiene"
+    proposal = next(item["result"] for item in result["tasks"] if item["task"]["target_id"] == created["id"])
+    assert proposal["auto_mutation"] is False
+    assert proposal["review_snapshot"]["id"] == created["id"]
+    assert proposal["affected_memory_ids"] == [created["id"]]
