@@ -3133,6 +3133,20 @@ class AuditLogsRepo:
             for r in rows
         ]
 
+    def action_counts(self, limit: int = 20) -> list[dict]:
+        with _conn() as conn:
+            rows = conn.execute(
+                """
+                select coalesce(action, ''), count(*)
+                from audit_logs
+                group by coalesce(action, '')
+                order by count(*) desc, coalesce(action, '') asc
+                limit ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [{"action": r[0], "count": r[1]} for r in rows]
+
 
 class CapturesRepo:
     def upsert(self, row: dict) -> None:

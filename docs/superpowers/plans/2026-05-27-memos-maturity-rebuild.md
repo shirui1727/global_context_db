@@ -1109,3 +1109,25 @@ git add app tests docs
 git commit -m "feat: accept readable cube ids"
 git push
 ```
+
+---
+
+## Task 20: Diagnostics governance follow-up
+
+Goal: close the v0.3 diagnostics gap by exposing pending promotion pressure and write-audit risk signals without adding a dashboard or heavy graph dependency.
+
+- [x] RED test: `/diagnostics` service data reports pending memory promotion count and audit write/high-risk action counts.
+- [x] Add `AuditLogsRepo.action_counts()` for grouped audit action summaries.
+- [x] Add `governance.improvement.pending_promotion_count` from memory promotion proposal statuses.
+- [x] Add `governance.audit.write_action_count`, `high_risk_write_action_count`, `high_risk_actions`, and grouped `write_action_counts`.
+- [x] Preserve boundary: diagnostics only reports; it does not auto-apply promotions or execute external workers.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_diagnostics.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```

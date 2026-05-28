@@ -6,6 +6,7 @@ from app.memory.service import list_audit_logs, memory_quality_report
 from app.storage.repo import (
     agent_sessions_repo,
     assets_repo,
+    audit_logs_repo,
     db_counts,
     failed_operations,
     file_references_repo,
@@ -14,6 +15,14 @@ from app.storage.repo import (
     memories_repo,
     sqlite_path,
 )
+
+
+HIGH_RISK_WRITE_ACTIONS = {
+    "memory.deleted",
+    "memory.updated",
+    "memory_promotion.promoted",
+    "memory_feedback.applied",
+}
 
 
 def _path_state(path: Path) -> dict:
@@ -26,6 +35,19 @@ def _path_state(path: Path) -> dict:
 
 def diagnostics() -> dict:
     counts = db_counts()
+    promotion_status_counts = memory_promotion_proposals_repo().status_counts()
+    pending_promotion_count = sum(
+        item["count"] for item in promotion_status_counts if item.get("status") in {"pending", "approved"}
+    )
+    write_action_counts = [
+        item
+        for item in audit_logs_repo().action_counts(limit=50)
+        if item.get("action") and not item["action"].startswith(("diagnostics.", "search.", "recall."))
+    ]
+    write_action_count = sum(item["count"] for item in write_action_counts)
+    high_risk_write_action_count = sum(
+        item["count"] for item in write_action_counts if item.get("action") in HIGH_RISK_WRITE_ACTIONS
+    )
     return {
         "ok": True,
         "service": settings.service_name,
@@ -67,6 +89,14 @@ def diagnostics() -> dict:
                 "domain": "improvement",
                 "purpose": "deterministic task queue for rebuild, reindex, recovery, and promotion work",
                 "status_counts": improvement_tasks_repo().status_counts(),
+                "pending_promotion_count": pending_promotion_count,
+            },
+            "audit": {
+                "domain": "audit",
+                "write_action_count": write_action_count,
+                "high_risk_write_action_count": high_risk_write_action_count,
+                "high_risk_actions": sorted(HIGH_RISK_WRITE_ACTIONS),
+                "write_action_counts": write_action_counts,
             },
             "recent_audit_logs": list_audit_logs(limit=10),
             "recent_failures": failed_operations(limit=20),
