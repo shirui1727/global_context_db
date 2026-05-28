@@ -57,6 +57,24 @@ def build_memory_relation_index(limit: int = 500, created_by: str | None = None)
             created.append(_upsert_relation("memory", left["id"], "shared_tag", "memory", right["id"], 0.6, metadata))
             created.append(_upsert_relation("memory", right["id"], "shared_tag", "memory", left["id"], 0.6, metadata))
 
+    content_buckets: dict[str, list[dict]] = {}
+    for memory in memories:
+        content = " ".join(str(memory.get("content") or "").lower().split())
+        if not content:
+            continue
+        content_buckets.setdefault(content, []).append(memory)
+
+    for content, bucket in content_buckets.items():
+        if len(bucket) < 2:
+            continue
+        for left, right in combinations(bucket[:30], 2):
+            metadata = {
+                "content_preview": content[:180],
+                "created_by": created_by or "memory_graph",
+            }
+            created.append(_upsert_relation("memory", left["id"], "duplicate_candidate", "memory", right["id"], 0.9, metadata))
+            created.append(_upsert_relation("memory", right["id"], "duplicate_candidate", "memory", left["id"], 0.9, metadata))
+
     for evidence in memory_evidence_repo().list_recent(limit=limit):
         created.append(
             _upsert_relation(

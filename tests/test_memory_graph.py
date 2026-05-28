@@ -42,3 +42,13 @@ def test_memory_relation_index_links_shared_tags_and_evidence(graph_env):
     assert any(edge["relation_kind"] == "shared_tag" and edge["target_id"] == second["id"] for edge in relations)
     assert any(edge["relation_kind"] == "supported_by" and edge["target_id"] == "event-graph-1" for edge in relations)
     assert all(edge["source_domain"] == "memory" for edge in relations)
+
+
+def test_memory_relation_index_links_duplicate_candidates(graph_env):
+    first = add_memory(MemoryCreate(content="Duplicate relation candidate", tags=["dup"], agent_id="codex"))["memory"]
+    second = add_memory(MemoryCreate(content="Duplicate relation candidate", tags=["dup"], agent_id="other-agent"))["memory"]
+
+    build_memory_relation_index(limit=100, created_by="graph-test")
+    relations = list_memory_relations(source_id=first["id"], limit=20)
+
+    assert any(edge["relation_kind"] == "duplicate_candidate" and edge["target_id"] == second["id"] for edge in relations)

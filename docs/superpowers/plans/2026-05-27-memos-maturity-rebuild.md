@@ -1291,3 +1291,25 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\relea
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 28: Relation index duplicate-candidate edges
+
+Goal: make the lightweight relation index more useful for hygiene by linking duplicate memory candidates, still without replacing SQLite/LanceDB or doing semantic graph reasoning.
+
+- [x] RED test: relation index creates `duplicate_candidate` edges between memories with identical normalized content.
+- [x] Add bidirectional `duplicate_candidate` edges with higher weight than shared-tag edges.
+- [x] Keep duplicate linking deterministic and text-normalized only; semantic duplicate detection remains a future review task.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_graph.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+git status --short
+```
