@@ -1131,3 +1131,25 @@ python -m compileall app tools
 git diff --check
 git status --short
 ```
+
+---
+
+## Task 21: Resume context format tightening
+
+Goal: make the reserved `format=raw|handoff|brief` parameter operational so agent clients can request either full recovery context or a compact handoff summary without guessing which arrays are populated.
+
+- [x] RED test: `format=raw` returns raw recent events while `format=brief` suppresses heavy arrays and returns compact counts.
+- [x] RED test: unknown resume context formats are rejected with a clear `ValueError`.
+- [x] Add top-level `format` to resume context responses.
+- [x] Keep default `handoff` behavior backward-compatible for existing callers.
+- [x] Preserve secret redaction and context budget trimming paths.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_v03_sessions_improvements.py -q
+python -m pytest -q
+python -m compileall app tools
+git diff --check
+git status --short
+```

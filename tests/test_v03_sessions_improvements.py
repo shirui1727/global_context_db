@@ -130,6 +130,39 @@ def test_resume_context_budget_and_secret_redaction(v03_env):
     assert event["tool_args"]["nested"]["api_key"] == "[REDACTED]"
 
 
+def test_resume_context_formats_are_distinct(v03_env):
+    session = create_session(
+        SessionCreate(source_agent="codex", project_path="S:/project/formats", title="format work", summary="format summary")
+    )
+    add_session_event(
+        session["id"],
+        SessionEventCreate(event_type="user_prompt", role="user", content="tighten resume context formats"),
+    )
+    add_session_event(
+        session["id"],
+        SessionEventCreate(event_type="assistant_note", role="assistant", content="handoff keeps structured progress"),
+    )
+
+    raw = get_resume_context(
+        ResumeContextRequest(session_id=session["id"], query="resume context formats", format="raw", include_raw_events=True)
+    )
+    brief = get_resume_context(
+        ResumeContextRequest(session_id=session["id"], query="resume context formats", format="brief", include_raw_events=True)
+    )
+
+    assert raw["format"] == "raw"
+    assert len(raw["recent_events"]) >= 2
+    assert brief["format"] == "brief"
+    assert brief["recent_events"] == []
+    assert brief["open_tasks"] == []
+    assert brief["relevant_memories"] == []
+    assert brief["summary"]["recent_event_count"] >= 2
+
+
+def test_resume_context_rejects_unknown_format(v03_env):
+    with pytest.raises(ValueError, match="format must be one of"):
+        get_resume_context(ResumeContextRequest(format="verbose"))
+
 def test_asset_version_change_creates_improvement_tasks(v03_env):
     first = create_asset(AssetCreate(uri="smb://NAS/photos/a.jpg", asset_key="photo:a", checksum="sha-a"))
     changed = create_asset(AssetCreate(uri="smb://NAS/photos/a.jpg", asset_key="photo:a", checksum="sha-b"))

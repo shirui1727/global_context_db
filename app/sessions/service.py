@@ -370,6 +370,8 @@ def add_session_model_usage(session_id: str, payload: SessionModelUsageCreate) -
 
 
 def get_resume_context(payload: ResumeContextRequest) -> dict:
+    if payload.format not in {"raw", "handoff", "brief"}:
+        raise ValueError("format must be one of: raw, handoff, brief")
     session = None
     if payload.session_id:
         if not agent_sessions_repo().get(payload.session_id):
@@ -390,6 +392,7 @@ def get_resume_context(payload: ResumeContextRequest) -> dict:
     ordered_events = list(reversed(recent_events))
     handoff = _build_handoff(session, ordered_events, open_tasks)
     response = {
+        "format": payload.format,
         "project_path": project_path,
         "session": session,
         "handoff": handoff,
@@ -400,6 +403,19 @@ def get_resume_context(payload: ResumeContextRequest) -> dict:
         "relevant_documents": groups.get("document", []),
         "warnings": [] if query else ["resume context has no query, project_path, or session summary"],
     }
+    if payload.format == "brief":
+        response["summary"] = {
+            "recent_event_count": len(ordered_events),
+            "open_task_count": len(open_tasks),
+            "relevant_memory_count": len(memories),
+            "relevant_asset_count": len(groups.get("asset", [])),
+            "relevant_document_count": len(groups.get("document", [])),
+        }
+        response["recent_events"] = []
+        response["open_tasks"] = []
+        response["relevant_memories"] = []
+        response["relevant_assets"] = []
+        response["relevant_documents"] = []
     return _apply_context_budget(response, payload.context_budget_chars)
 
 
