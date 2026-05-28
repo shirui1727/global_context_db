@@ -3,7 +3,7 @@ from hashlib import sha256
 
 from app.core.schemas import ImprovementTaskCreate, ImprovementTaskUpdate, ImproveRequest
 from app.core.schemas import MemoryPromotionCreate, SessionSummaryCreate
-from app.storage.repo import audit_logs_repo, improvement_tasks_repo
+from app.storage.repo import audit_logs_repo, improvement_tasks_repo, memories_repo
 from app.storage.repo import session_events_repo
 
 TASK_KINDS = {
@@ -216,6 +216,7 @@ def _execute_memory_hygiene_task(task: dict, payload: ImproveRequest) -> dict:
         "refresh_stale_memory": "review_and_refresh_or_archive",
         "resolve_memory_conflict": "compare_conflicting_memories",
     }.get(task_kind, "manual_review")
+    affected_memory_ids = _hygiene_affected_memory_ids(task, candidate)
     return {
         "status": "proposal",
         "task_kind": task_kind,
@@ -226,6 +227,43 @@ def _execute_memory_hygiene_task(task: dict, payload: ImproveRequest) -> dict:
         "quality_category": metadata.get("quality_category"),
         "candidate": candidate,
         "executor": payload.created_by or "scheduler",
+        "auto_mutation": False,
+        "affected_memory_ids": affected_memory_ids,
+        "review_snapshot": _memory_review_snapshot(task.get("target_id")) if task.get("target_domain") == "memory" else None,
+        "related_snapshots": [
+            snapshot
+            for memory_id in affected_memory_ids
+            if memory_id != task.get("target_id")
+            for snapshot in [_memory_review_snapshot(memory_id)]
+            if snapshot is not None
+        ],
+    }
+
+
+def _hygiene_affected_memory_ids(task: dict, candidate: dict) -> list[str]:
+    ids = candidate.get("memory_ids") if isinstance(candidate, dict) else None
+    if isinstance(ids, list) and ids:
+        return [str(memory_id) for memory_id in ids if memory_id]
+    target_id = task.get("target_id")
+    return [str(target_id)] if target_id else []
+
+
+def _memory_review_snapshot(memory_id: str | None) -> dict | None:
+    if not memory_id:
+        return None
+    memory = memories_repo().get(memory_id)
+    if not memory:
+        return None
+    content = memory.get("content") or ""
+    return {
+        "id": memory["id"],
+        "cube_id": memory.get("cube_id"),
+        "status": memory.get("status"),
+        "trust_level": memory.get("trust_level"),
+        "source_kind": memory.get("source_kind"),
+        "tags": memory.get("tags") or [],
+        "updated_at": memory.get("updated_at"),
+        "content_preview": content[:240],
     }
 
 

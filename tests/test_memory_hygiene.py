@@ -72,3 +72,26 @@ def test_memory_hygiene_tasks_have_deterministic_executor_results(hygiene_env):
     assert result["done"] >= 1
     assert all(item["result"]["status"] == "proposal" for item in result["tasks"] if item["ok"])
     assert any(item["result"]["recommended_action"] == "attach_evidence_or_verify" for item in result["tasks"] if item["ok"])
+
+
+def test_memory_hygiene_executor_includes_review_snapshots(hygiene_env):
+    created = add_memory(
+        MemoryCreate(
+            content="Review snapshot memory should carry current state.",
+            tags=["hygiene-snapshot"],
+            agent_id="codex",
+            trust_level="agent_inferred",
+        )
+    )["memory"]
+    enqueue_memory_hygiene(limit=10, created_by="hygiene-test")
+
+    result = run_pending_tasks(limit=5, queue_name="memory_hygiene", worker_id="hygiene-worker")
+    proposal = next(item["result"] for item in result["tasks"] if item["task"]["target_id"] == created["id"])
+
+    assert proposal["status"] == "proposal"
+    assert proposal["auto_mutation"] is False
+    assert proposal["review_snapshot"]["id"] == created["id"]
+    assert proposal["review_snapshot"]["content_preview"].startswith("Review snapshot memory")
+    assert proposal["review_snapshot"]["trust_level"] == "agent_inferred"
+    assert proposal["review_snapshot"]["tags"] == ["hygiene-snapshot"]
+    assert proposal["affected_memory_ids"] == [created["id"]]

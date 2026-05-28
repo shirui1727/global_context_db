@@ -1374,3 +1374,24 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 32: Hygiene proposal review snapshots
+
+Goal: make memory hygiene executor output directly reviewable without changing the safety boundary that hygiene tasks never mutate formal memories automatically.
+
+- [x] Add current memory review snapshots to hygiene executor proposals.
+- [x] Include `auto_mutation=false` and `affected_memory_ids` so callers can distinguish proposal-only output from write actions.
+- [x] Preserve existing deterministic recommended actions for evidence verification, stale refresh, and conflict review.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_memory_hygiene.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```
