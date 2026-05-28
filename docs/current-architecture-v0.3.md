@@ -446,11 +446,13 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-nas-package.ps1 <zip>
 
 - `/health` 正常。
 - `/diagnostics` 显示 memory/document/asset/session/improvement 计数。
-- `/diagnostics` 显示 memory promotion 计数和 memory quality 摘要。
+- `/diagnostics` reports memory promotion counts, memory quality summary, and relation-index summary.
+- `/diagnostics` reports scheduler queue health: `pending_by_queue`, `failed_by_queue`, `retryable_failed_by_queue`, `exhausted_failed_by_queue`, `oldest_pending_by_queue`.
 - `/assets/search` 不返回 memory。
 - `/search` 默认分组返回。
 - `/memories/quality` 能返回低证据、过期和冲突候选。
 - `/memories/quality/enqueue-improvements` 能把质量候选转换成 improvement tasks。
+- `/scheduler/status` and `gcd_scheduler_status` return queue health for judging SQLite queue pressure before considering Redis.
 - `/retrieval/eval` 能返回固定 query 的 domain/id 命中率。
 - `gcd_get_resume_context` 能返回结构化 handoff。
 - resume context 支持 `include_raw_events` 和 `context_budget_chars`。

@@ -1625,3 +1625,24 @@ python -m pytest -q
 python -m compileall app tools
 git diff --check
 ```
+
+---
+
+## Task 44: Architecture docs catch-up for queue health
+
+Goal: update human-facing architecture and MemOS borrowing docs after Tasks 36-43 so future continuation does not re-trigger Redis or dashboard work before diagnostics prove the need.
+
+- [x] Update current architecture acceptance notes with relation-index summary and scheduler queue-health diagnostics.
+- [x] Update MemOS borrowing trigger conditions for Redis scheduler and dashboard/subgraph based on queue-health evidence.
+- [x] Update current status through Task 43, including queue-health diagnostics and stricter NAS package verification.
+
+Verification:
+
+```powershell
+python -c "from pathlib import Path; [p.read_text(encoding='utf-8') for p in Path('docs').rglob('*.md')]"
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```

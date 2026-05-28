@@ -254,8 +254,8 @@ conflicted
 ### 后续触发条件
 
 18. LLM feedback action proposal：等 deterministic proposal 和手动 apply 有实际使用样本后再接。
-19. Redis scheduler：等 NAS 单机 SQLite 队列出现多 worker/远程并发压力后再做。
-20. dashboard/subgraph：等 `memory_relations` 数据积累并证明有用后再做。
+19. Redis scheduler: SQLite scheduler now has queue health, retry-state failure, and oldest-pending diagnostics; add Redis only after those signals show real multi-worker or remote concurrency pressure.
+20. dashboard/subgraph: build only after `memory_relations` and scheduler queue-health data prove diagnostics alone is not enough.
 21. User manager / ACL：等真实多用户共享需求出现后再做。
 ---
 
@@ -281,4 +281,4 @@ git push
 
 ## 7. Current status
 
-Through Task 28, deterministic proposal, hook runtime, cube strategy, snapshot/export/import, retrieval eval, media worker adapters, MCP audit, memory hygiene queue, and lightweight relation index have landed. Do not default to Redis, LLM planner, dashboard/subgraph, or ACL; continue with verification, documentation, diagnostics, and small hardening slices first.
+Through Task 43, deterministic proposal, hook runtime, cube strategy, snapshot/export/import, retrieval eval, media worker adapters, MCP audit, memory hygiene queue, lightweight relation index, scheduler queue health diagnostics, and stricter NAS package verification have landed. Do not default to Redis, LLM planner, dashboard/subgraph, or ACL; continue with verification, documentation, diagnostics, and small hardening slices first.

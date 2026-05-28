@@ -173,6 +173,8 @@ Global Context DB 是 NAS 上的共享记忆和资产控制面，MCP 写入工�
 - `memory_evidence.source_span.metadata` can carry provenance fields such as `document_chunk_id`, `asset_artifact_id`, `session_event_id`, selector, and quote_hash.
 - `POST /memories/hygiene/enqueue` and `gcd_enqueue_memory_hygiene` enqueue candidates into `memory_hygiene`; scheduler output is review proposals only and does not mutate formal memory automatically.
 - Lightweight SQLite `memory_relations` index is available via REST/MCP. Current edge types are `shared_tag`, `supported_by`, and `duplicate_candidate`. This is not a graph database and does not replace the SQLite + LanceDB backbone.
+- Scheduler hardening after v0.3.9 adds queue-health observability without Redis: `queue_health`, pending/failed/retry-state counts by queue, oldest pending timestamps, and REST/MCP surface verification.
+- NAS package verification now requires scheduler, diagnostics, hygiene, relation-index, and storage repo files so recent hardening cannot be silently omitted from overlay bundles.
 
 ## Future trigger conditions
 
