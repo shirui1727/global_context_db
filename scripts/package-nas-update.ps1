@@ -42,6 +42,7 @@ $Items = @(
     "Dockerfile",
     "pyproject.toml",
     "README.md",
+    "scripts",
     "tools"
 )
 
@@ -94,6 +95,8 @@ try {
         "global_context_db/app/scheduler/service.py",
         "global_context_db/app/storage/repo.py",
         "global_context_db/docker-compose.yaml",
+        "global_context_db/scripts/collect-diagnostics-snapshot.ps1",
+        "global_context_db/scripts/run-release-acceptance.ps1",
         "global_context_db/tools/media_manifest_worker.py",
         "global_context_db/tools/retrieval_eval_fixture.py"
     )

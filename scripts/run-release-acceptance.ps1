@@ -49,6 +49,18 @@ if open_boxes:
     raise SystemExit(f'MemOS maturity plan still has {len(open_boxes)} open checkbox(es)')
 
 print('MemOS maturity plan: 45 tasks, 0 open checkboxes')
+
+runtime_plan = Path('docs/superpowers/plans/2026-06-05-runtime-acceptance-hardening.md')
+runtime_text = runtime_plan.read_text(encoding='utf-8')
+runtime_tasks = [int(n) for n in re.findall(r'^## Task (\d+): ', runtime_text, flags=re.M)]
+runtime_open_boxes = re.findall(r'^- \[ \] ', runtime_text, flags=re.M)
+
+if runtime_tasks != list(range(1, 6)):
+    raise SystemExit(f'Unexpected runtime acceptance task sequence: {runtime_tasks}')
+if runtime_open_boxes:
+    raise SystemExit(f'Runtime acceptance plan still has {len(runtime_open_boxes)} open checkbox(es)')
+
+print('Runtime acceptance plan: 5 tasks, 0 open checkboxes')
 "@
 
     Write-Host "`n== git diff check =="

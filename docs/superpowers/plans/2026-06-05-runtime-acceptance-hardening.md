@@ -33,9 +33,9 @@ git diff --check
 
 Goal: make post-deploy verification explicit for a NAS GUI/operator workflow.
 
-- [ ] Document the exact post-overlay checks: `/health`, `/diagnostics`, `/scheduler/status`, MCP endpoint reachability, and package version evidence.
-- [ ] Include expected diagnostics fields for queue health and governance audit.
-- [ ] Include rollback notes that avoid destructive data operations.
+- [x] Document the exact post-overlay checks: `/health`, `/diagnostics`, `/scheduler/status`, MCP endpoint reachability, and package version evidence.
+- [x] Include expected diagnostics fields for queue health and governance audit.
+- [x] Include rollback notes that avoid destructive data operations.
 
 ---
 
@@ -43,9 +43,9 @@ Goal: make post-deploy verification explicit for a NAS GUI/operator workflow.
 
 Goal: make it easy to collect a bounded support snapshot from a running service without adding a dashboard.
 
-- [ ] Add a script or documented command that fetches `/health`, `/diagnostics`, and `/scheduler/status` into timestamped JSON files.
-- [ ] Redact API keys and avoid collecting raw memory contents.
-- [ ] Verify the output shape can be shared for troubleshooting.
+- [x] Add a script or documented command that fetches `/health`, `/diagnostics`, and `/scheduler/status` into timestamped JSON files.
+- [x] Redact API keys and avoid collecting raw memory contents.
+- [x] Verify the output shape can be shared for troubleshooting.
 
 ---
 
@@ -53,9 +53,9 @@ Goal: make it easy to collect a bounded support snapshot from a running service 
 
 Goal: make Redis/dashboard/LLM escalation decisions evidence-led.
 
-- [ ] Define concrete signs that SQLite scheduler is insufficient.
-- [ ] Define signs that diagnostics are insufficient and a dashboard/subgraph is warranted.
-- [ ] Define signs that deterministic feedback proposals are insufficient and LLM planner work is justified.
+- [x] Define concrete signs that SQLite scheduler is insufficient.
+- [x] Define signs that diagnostics are insufficient and a dashboard/subgraph is warranted.
+- [x] Define signs that deterministic feedback proposals are insufficient and LLM planner work is justified.
 
 ---
 
@@ -63,5 +63,5 @@ Goal: make Redis/dashboard/LLM escalation decisions evidence-led.
 
 Goal: make each future release easier to ship and audit.
 
-- [ ] Add a short release-notes template covering changes, verification evidence, NAS package path, known warnings, and rollback notes.
-- [ ] Link the acceptance script and NAS operator checklist.
+- [x] Add a short release-notes template covering changes, verification evidence, NAS package path, known warnings, and rollback notes.
+- [x] Link the acceptance script and NAS operator checklist.
