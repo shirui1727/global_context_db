@@ -50,6 +50,19 @@ def test_diagnostics_reports_pending_promotions_and_write_audit_counts(diagnosti
     assert any(item["action"] == "memory.updated" for item in audit["write_action_counts"])
 
 
+def test_diagnostics_counts_mcp_high_risk_write_actions(diagnostics_env):
+    from app.mcp_server import gcd_add_memory, gcd_delete_memory
+
+    created = gcd_add_memory(content="diagnostics MCP high risk audit memory", agent_id="codex")
+    gcd_delete_memory(created["memory"]["id"])
+
+    audit = diagnostics()["governance"]["audit"]
+
+    assert "mcp.high_risk_write" in audit["high_risk_actions"]
+    assert audit["high_risk_write_action_count"] >= 1
+    assert any(item["action"] == "mcp.high_risk_write" for item in audit["write_action_counts"])
+
+
 def test_diagnostics_reports_relation_index_kind_counts(diagnostics_env):
     first = add_memory(MemoryCreate(content="diagnostics relation one", tags=["diag-relation"], agent_id="codex"))["memory"]
     second = add_memory(MemoryCreate(content="diagnostics relation two", tags=["diag-relation"], agent_id="codex"))["memory"]

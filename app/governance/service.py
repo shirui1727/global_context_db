@@ -19,6 +19,7 @@ from app.storage.repo import (
 
 
 HIGH_RISK_WRITE_ACTIONS = {
+    "mcp.high_risk_write",
     "memory.deleted",
     "memory.updated",
     "memory_promotion.promoted",

@@ -816,6 +816,27 @@ git diff --check
 
 ---
 
+## Task 45: MCP high-risk diagnostics coverage
+
+Goal: make `/diagnostics` count MCP high-risk write audit events so high-risk tool operations are visible in the same governance summary as service-level write risks.
+
+- [x] Add `mcp.high_risk_write` to diagnostics high-risk write actions.
+- [x] Verify `gcd_delete_memory` MCP high-risk audit is counted by diagnostics.
+- [x] Keep MCP high-risk audit as an overlay signal; it does not replace service-level domain audit logs.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_diagnostics.py tests\test_mcp_audit.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```
+
+---
+
 ## 12. 后续阶段触发条件
 
 - Scheduler SQLite 连续通过本地和 NAS 运行验证后，再做 Redis Streams。
