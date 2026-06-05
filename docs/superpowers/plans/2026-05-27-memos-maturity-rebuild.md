@@ -70,7 +70,7 @@
 - Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
 - Test: `S:\项目开发\全局数据库\global_context_db\tests\test_scheduler.py`
 
-- [ ] **Step 1: 写失败测试：pending task 可 claim，且字段不丢失**
+- [x] **Step 1: 写失败测试：pending task 可 claim，且字段不丢失**
 
 ```python
 def test_scheduler_claims_pending_task_with_cube_and_queue(tmp_path, monkeypatch):
@@ -104,7 +104,7 @@ def test_scheduler_claims_pending_task_with_cube_and_queue(tmp_path, monkeypatch
     assert claimed["claimed_until"]
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 ```powershell
 python -m pytest tests\test_scheduler.py::test_scheduler_claims_pending_task_with_cube_and_queue -q
@@ -112,7 +112,7 @@ python -m pytest tests\test_scheduler.py::test_scheduler_claims_pending_task_wit
 
 Expected: FAIL，提示 `app.scheduler` 不存在或字段不存在。
 
-- [ ] **Step 3: 扩展 schema**
+- [x] **Step 3: 扩展 schema**
 
 在 `ImprovementTaskCreate` 增加：
 
@@ -135,7 +135,7 @@ queue_name: str | None = None
 last_error: str | None = None
 ```
 
-- [ ] **Step 4: 扩展 `improvement_tasks` 表和自愈列**
+- [x] **Step 4: 扩展 `improvement_tasks` 表和自愈列**
 
 在 create table 增加：
 
@@ -152,7 +152,7 @@ last_error text
 
 在 `_ensure_columns(conn, "improvement_tasks", ...)` 加同名列。
 
-- [ ] **Step 5: 更新 `ImprovementTasksRepo`**
+- [x] **Step 5: 更新 `ImprovementTasksRepo`**
 
 更新 `upsert/get/update/list_recent/_decode` 的字段顺序，确保返回 dict 包含：
 
@@ -163,7 +163,7 @@ last_error text
 
 保留旧字段 `claimed_by` / `error_message` 作为兼容别名，不删除。
 
-- [ ] **Step 6: 运行当前测试**
+- [x] **Step 6: 运行当前测试**
 
 ```powershell
 python -m pytest tests\test_scheduler.py::test_scheduler_claims_pending_task_with_cube_and_queue -q
@@ -181,7 +181,7 @@ Expected: FAIL 只剩 `claim_next_task` 未实现。
 - Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
 - Test: `S:\项目开发\全局数据库\global_context_db\tests\test_scheduler.py`
 
-- [ ] **Step 1: 写状态机测试**
+- [x] **Step 1: 写状态机测试**
 
 追加测试：
 
@@ -201,7 +201,7 @@ def test_scheduler_retries_failed_until_max_retries(tmp_path, monkeypatch):
 
 不要跳过；用真实 repo + SQLite 临时目录。
 
-- [ ] **Step 2: 在 repo 增加原子 claim 方法**
+- [x] **Step 2: 在 repo 增加原子 claim 方法**
 
 新增 `ImprovementTasksRepo.claim_next(queue_name, worker_id, now, claimed_until)`：
 
@@ -222,7 +222,7 @@ set status='running', worker_id=?, claimed_by=?, claimed_at=?, claimed_until=?, 
 where id=? and status='pending'
 ```
 
-- [ ] **Step 3: 实现 `app/scheduler/service.py`**
+- [x] **Step 3: 实现 `app/scheduler/service.py`**
 
 必须提供：
 
@@ -245,7 +245,7 @@ failed + retry_count < max_retries + next_run_at <= now -> pending
 failed + retry_count >= max_retries -> failed
 ```
 
-- [ ] **Step 4: 运行 scheduler 测试**
+- [x] **Step 4: 运行 scheduler 测试**
 
 ```powershell
 python -m pytest tests\test_scheduler.py -q
@@ -263,7 +263,7 @@ Expected: PASS。
 - Modify: `S:\项目开发\全局数据库\global_context_db\app\mcp_server.py`
 - Test: `S:\项目开发\全局数据库\global_context_db\tests\test_scheduler.py`
 
-- [ ] **Step 1: 让 `run_pending_tasks()` 调用现有 deterministic executor**
+- [x] **Step 1: 让 `run_pending_tasks()` 调用现有 deterministic executor**
 
 把 `_execute_task(task, payload)` 抽成可复用函数：
 
@@ -282,7 +282,7 @@ def execute_improvement_task(task: dict, *, actor: str = "scheduler", clean_lega
     return _execute_task(task, payload)
 ```
 
-- [ ] **Step 2: 写执行测试**
+- [x] **Step 2: 写执行测试**
 
 ```python
 def test_scheduler_run_pending_tasks_executes_known_task(tmp_path, monkeypatch):
@@ -290,7 +290,7 @@ def test_scheduler_run_pending_tasks_executes_known_task(tmp_path, monkeypatch):
     # assert run_pending_tasks(limit=1)["done"] == 1
 ```
 
-- [ ] **Step 3: REST endpoints**
+- [x] **Step 3: REST endpoints**
 
 新增：
 
@@ -303,7 +303,7 @@ GET  /scheduler/status
 
 返回不要暴露内部异常堆栈，400 用 `HTTPException`。
 
-- [ ] **Step 4: MCP tools**
+- [x] **Step 4: MCP tools**
 
 新增：
 
@@ -314,7 +314,7 @@ gcd_scheduler_release_expired
 gcd_scheduler_status
 ```
 
-- [ ] **Step 5: 验证**
+- [x] **Step 5: 验证**
 
 ```powershell
 python -m pytest tests\test_scheduler.py -q
@@ -324,7 +324,7 @@ python -m compileall app tools
 
 Expected: 全部 PASS。
 
-- [ ] **Step 6: 提交推送**
+- [x] **Step 6: 提交推送**
 
 ```powershell
 git add app\core\schemas.py app\storage\repo.py app\scheduler app\improvements\service.py app\api.py app\mcp_server.py tests\test_scheduler.py
@@ -344,7 +344,7 @@ git push
 - Modify: `S:\项目开发\全局数据库\global_context_db\app\mcp_server.py`
 - Test: `S:\项目开发\全局数据库\global_context_db\tests\test_memory_feedback.py`
 
-- [ ] **Step 1: 写 apply 测试**
+- [x] **Step 1: 写 apply 测试**
 
 覆盖：
 
@@ -355,7 +355,7 @@ def test_feedback_add_evidence_action_applies(tmp_path, monkeypatch): ...
 def test_feedback_create_memory_action_applies(tmp_path, monkeypatch): ...
 ```
 
-- [ ] **Step 2: schema**
+- [x] **Step 2: schema**
 
 新增：
 
@@ -374,7 +374,7 @@ class MemoryFeedbackActionCreate(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 ```
 
-- [ ] **Step 3: repo tables**
+- [x] **Step 3: repo tables**
 
 新增：
 
@@ -383,7 +383,7 @@ memory_feedback(id, cube_id, feedback_text, target_memory_id, status, created_by
 memory_feedback_actions(id, feedback_id, action_type, target_memory_id, payload, status, applied_at, metadata)
 ```
 
-- [ ] **Step 4: service apply**
+- [x] **Step 4: service apply**
 
 支持 action：
 
@@ -397,7 +397,7 @@ reject         -> feedback/action 标记 rejected
 
 每次 apply 写 audit log，action 幂等：已 `applied` 再 apply 不重复执行。
 
-- [ ] **Step 5: REST/MCP**
+- [x] **Step 5: REST/MCP**
 
 ```text
 POST /memory-feedback
@@ -410,7 +410,7 @@ gcd_list_memory_feedback
 gcd_apply_memory_feedback
 ```
 
-- [ ] **Step 6: 验证提交**
+- [x] **Step 6: 验证提交**
 
 ```powershell
 python -m pytest tests\test_memory_feedback.py -q
@@ -435,7 +435,7 @@ git push
 - Create: `S:\项目开发\全局数据库\global_context_db\app\handlers\scheduler_handler.py`
 - Test: `S:\项目开发\全局数据库\global_context_db\tests\test_runtime_components.py`
 
-- [ ] **Step 1: 写 component 初始化测试**
+- [x] **Step 1: 写 component 初始化测试**
 
 ```python
 def test_runtime_components_bootstrap_is_idempotent(tmp_path, monkeypatch):
@@ -453,7 +453,7 @@ def test_runtime_components_bootstrap_is_idempotent(tmp_path, monkeypatch):
     assert first.sqlite_path == settings.sqlite_path
 ```
 
-- [ ] **Step 2: 实现 RuntimeComponents**
+- [x] **Step 2: 实现 RuntimeComponents**
 
 ```python
 @dataclass(frozen=True)
@@ -470,7 +470,7 @@ def get_runtime_components(settings: Settings = settings) -> RuntimeComponents:
 
 先别把所有 service 塞进 dataclass；保持轻量，避免大爆改。
 
-- [ ] **Step 3: 抽 handler 薄封装**
+- [x] **Step 3: 抽 handler 薄封装**
 
 每个 handler 只做：
 
@@ -480,11 +480,11 @@ validate request -> call service -> normalize error/response
 
 不要在 handler 里写 repo SQL 或业务算法。
 
-- [ ] **Step 4: 逐步改 API/MCP 调 handler**
+- [x] **Step 4: 逐步改 API/MCP 调 handler**
 
 先迁移新增的 scheduler/feedback/cube，再迁移 memory/session/asset。每迁一组跑相关测试。
 
-- [ ] **Step 5: 验证提交**
+- [x] **Step 5: 验证提交**
 
 ```powershell
 python -m pytest -q
@@ -504,7 +504,7 @@ git push
 - Modify: `S:\项目开发\全局数据库\global_context_db\app\storage\repo.py`
 - Test: `S:\项目开发\全局数据库\global_context_db\tests\test_memory_lifecycle.py`
 
-- [ ] **Step 1: 新增 lifecycle 表**
+- [x] **Step 1: 新增 lifecycle 表**
 
 ```sql
 memory_lifecycle_events(
@@ -519,7 +519,7 @@ memory_lifecycle_events(
 )
 ```
 
-- [ ] **Step 2: ReaderItem -> candidate**
+- [x] **Step 2: ReaderItem -> candidate**
 
 新增 `memory_candidates`：保存 reader 输出但尚未确认的记忆候选。
 
@@ -529,11 +529,11 @@ memory_lifecycle_events(
 candidate -> active -> verified -> stale -> archived/deleted/conflicted
 ```
 
-- [ ] **Step 3: 迁移 promotion/quality report 使用 lifecycle**
+- [x] **Step 3: 迁移 promotion/quality report 使用 lifecycle**
 
 promotion 成功后写 `promoted` 事件；update 写 `corrected`；archive 写 `archived`。
 
-- [ ] **Step 4: 验证提交**
+- [x] **Step 4: 验证提交**
 
 ```powershell
 python -m pytest tests\test_memory_lifecycle.py -q
@@ -811,27 +811,6 @@ git status --short
 
 ```powershell
 python -c "from pathlib import Path; [p.read_text(encoding='utf-8') for p in Path('docs').rglob('*.md')]"
-git diff --check
-```
-
----
-
-## Task 45: MCP high-risk diagnostics coverage
-
-Goal: make `/diagnostics` count MCP high-risk write audit events so high-risk tool operations are visible in the same governance summary as service-level write risks.
-
-- [x] Add `mcp.high_risk_write` to diagnostics high-risk write actions.
-- [x] Verify `gcd_delete_memory` MCP high-risk audit is counted by diagnostics.
-- [x] Keep MCP high-risk audit as an overlay signal; it does not replace service-level domain audit logs.
-
-Verification:
-
-```powershell
-python -m pytest tests\test_diagnostics.py tests\test_mcp_audit.py -q
-python -m pytest -q
-python -m compileall app tools
-powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
-powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
 
@@ -1667,3 +1646,26 @@ powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputD
 powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
 git diff --check
 ```
+
+---
+
+## Task 45: MCP high-risk diagnostics coverage
+
+Goal: make `/diagnostics` count MCP high-risk write audit events so high-risk tool operations are visible in the same governance summary as service-level write risks.
+
+- [x] Add `mcp.high_risk_write` to diagnostics high-risk write actions.
+- [x] Verify `gcd_delete_memory` MCP high-risk audit is counted by diagnostics.
+- [x] Keep MCP high-risk audit as an overlay signal; it does not replace service-level domain audit logs.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_diagnostics.py tests\test_mcp_audit.py -q
+python -m pytest -q
+python -m compileall app tools
+powershell -ExecutionPolicy Bypass -File scripts\package-nas-update.ps1 -OutputDir ..\release
+powershell -ExecutionPolicy Bypass -File scripts\verify-nas-package.ps1 ..\release\global_context_db.zip
+git diff --check
+```
+
+---
