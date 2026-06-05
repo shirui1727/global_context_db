@@ -1,0 +1,66 @@
+param(
+    [string]$OutputDir = "",
+    [switch]$SkipPytest
+)
+
+$ErrorActionPreference = "Stop"
+
+$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+Push-Location $RepoRoot
+try {
+    if (-not $OutputDir) {
+        $OutputDir = Join-Path (Split-Path $RepoRoot -Parent) "release"
+    }
+
+    $OutputDir = [System.IO.Path]::GetFullPath($OutputDir)
+    $ZipPath = Join-Path $OutputDir "global_context_db.zip"
+
+    Write-Host "== Global Context DB release acceptance =="
+    Write-Host "Repo: $RepoRoot"
+    Write-Host "OutputDir: $OutputDir"
+
+    if (-not $SkipPytest) {
+        Write-Host "`n== pytest =="
+        python -m pytest -q
+    }
+
+    Write-Host "`n== compileall =="
+    python -m compileall app tools
+
+    Write-Host "`n== NAS package =="
+    powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "package-nas-update.ps1") -OutputDir $OutputDir
+
+    Write-Host "`n== NAS package verify =="
+    powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-nas-package.ps1") $ZipPath
+
+    Write-Host "`n== plan checklist sanity =="
+    python -c @"
+from pathlib import Path
+import re
+
+plan = Path('docs/superpowers/plans/2026-05-27-memos-maturity-rebuild.md')
+text = plan.read_text(encoding='utf-8')
+tasks = [int(n) for n in re.findall(r'^## Task (\d+): ', text, flags=re.M)]
+open_boxes = re.findall(r'^- \[ \] ', text, flags=re.M)
+
+if tasks != list(range(1, 46)):
+    raise SystemExit(f'Unexpected MemOS maturity task sequence: {tasks[:5]} ... {tasks[-5:]}')
+if open_boxes:
+    raise SystemExit(f'MemOS maturity plan still has {len(open_boxes)} open checkbox(es)')
+
+print('MemOS maturity plan: 45 tasks, 0 open checkboxes')
+"@
+
+    Write-Host "`n== git diff check =="
+    git diff --check
+
+    Write-Host "`n== acceptance passed =="
+    [pscustomobject]@{
+        Ok = $true
+        Repo = "$RepoRoot"
+        ZipPath = "$ZipPath"
+    }
+}
+finally {
+    Pop-Location
+}
