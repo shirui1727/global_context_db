@@ -122,3 +122,17 @@ The first executable slice after this roadmap is Ops Diagnostics Phase:
 - Codex MCP client profile
 - OpenClaw MCP client profile
 - MCP tool inventory
+
+## Roadmap completion executable slice
+
+This slice completes the current no-heavy-dependency roadmap pass by adding:
+
+- retrieval eval fixture validation and reporting;
+- feedback governance export/reporting;
+- asset manifest schema versioning;
+- session recovery reporting;
+- memory hygiene/relation governance reporting;
+- MCP client smoke hardening;
+- release/package gates for the new artifacts.
+
+Redis, dashboard/subgraph, LLM planner, and ACL remain untriggered until evidence records justify them.
