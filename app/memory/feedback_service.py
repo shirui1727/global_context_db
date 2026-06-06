@@ -96,6 +96,40 @@ def list_memory_feedback_actions(feedback_id: str, limit: int = 100) -> list[dic
     return memory_feedback_actions_repo().list_by_feedback(feedback_id, limit)
 
 
+def summarize_memory_feedback_governance(limit: int = 100) -> dict[str, Any]:
+    feedback_rows = list_memory_feedback(limit=limit)
+    status_counts: dict[str, int] = {}
+    action_status_counts: dict[str, int] = {}
+    action_type_counts: dict[str, int] = {}
+    planner_modes: dict[str, int] = {}
+    for feedback in feedback_rows:
+        status = feedback.get("status") or "unknown"
+        status_counts[status] = status_counts.get(status, 0) + 1
+        metadata = feedback.get("metadata") or {}
+        proposal = metadata.get("proposal") or {}
+        mode = proposal.get("mode") or proposal.get("planner")
+        if mode:
+            planner_modes[mode] = planner_modes.get(mode, 0) + 1
+        for action in memory_feedback_actions_repo().list_by_feedback(feedback["id"], limit=100):
+            action_status = action.get("status") or "unknown"
+            action_type = action.get("action_type") or "unknown"
+            action_status_counts[action_status] = action_status_counts.get(action_status, 0) + 1
+            action_type_counts[action_type] = action_type_counts.get(action_type, 0) + 1
+            action_metadata = action.get("metadata") or {}
+            action_proposal = action_metadata.get("proposal") or {}
+            action_mode = action_proposal.get("mode") or action_proposal.get("planner")
+            if action_mode:
+                planner_modes[action_mode] = planner_modes.get(action_mode, 0) + 1
+    return {
+        "feedback_count": len(feedback_rows),
+        "status_counts": status_counts,
+        "action_status_counts": action_status_counts,
+        "action_type_counts": action_type_counts,
+        "planner_modes": planner_modes,
+        "llm_used": False,
+    }
+
+
 def propose_memory_feedback_actions(feedback_id: str, planner: str = "deterministic") -> dict:
     if planner != "deterministic":
         raise ValueError("only deterministic planner is available")

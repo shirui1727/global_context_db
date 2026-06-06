@@ -10,6 +10,7 @@ from app.memory.feedback_service import (
     apply_memory_feedback,
     create_memory_feedback,
     propose_memory_feedback_actions,
+    summarize_memory_feedback_governance,
 )
 from app.memory.service import add_memory, list_memory_evidence, list_memory_versions
 from app.storage.bootstrap import bootstrap, reset_bootstrap
@@ -241,3 +242,23 @@ def test_feedback_proposal_api_and_mcp_surfaces(feedback_env):
     assert api_response.json()["planner"]["mode"] == "deterministic"
     assert api_response.json()["actions"][0]["action_type"] == "add_evidence"
     assert mcp_result["actions"][0]["status"] == "proposed"
+
+
+def test_feedback_governance_summary_counts_statuses_and_planner_mode(feedback_env):
+    memory = _memory("Feedback governance summary target.")
+    feedback = create_memory_feedback(
+        MemoryFeedbackCreate(
+            feedback_text="Evidence: reviewer confirmed this memory.",
+            target_memory_id=memory["id"],
+            created_by="tester",
+        )
+    )
+    propose_memory_feedback_actions(feedback["id"], planner="deterministic")
+
+    summary = summarize_memory_feedback_governance(limit=20)
+
+    assert summary["feedback_count"] >= 1
+    assert summary["status_counts"]["planned"] >= 1
+    assert summary["action_status_counts"]["proposed"] >= 1
+    assert summary["planner_modes"]["deterministic"] >= 1
+    assert summary["llm_used"] is False
