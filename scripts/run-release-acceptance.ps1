@@ -61,6 +61,18 @@ if runtime_open_boxes:
     raise SystemExit(f'Runtime acceptance plan still has {len(runtime_open_boxes)} open checkbox(es)')
 
 print('Runtime acceptance plan: 5 tasks, 0 open checkboxes')
+
+field_plan = Path('docs/superpowers/plans/2026-06-06-field-acceptance-first-use-loop.md')
+field_text = field_plan.read_text(encoding='utf-8')
+field_tasks = [int(n) for n in re.findall(r'^## Task (\d+): ', field_text, flags=re.M)]
+field_open_boxes = re.findall(r'^- \[ \] ', field_text, flags=re.M)
+
+if field_tasks != list(range(1, 8)):
+    raise SystemExit(f'Unexpected field acceptance task sequence: {field_tasks}')
+if field_open_boxes:
+    raise SystemExit(f'Field acceptance plan still has {len(field_open_boxes)} open checkbox(es)')
+
+print('Field acceptance plan: 7 tasks, 0 open checkboxes')
 "@
 
     Write-Host "`n== git diff check =="

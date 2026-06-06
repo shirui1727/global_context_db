@@ -74,3 +74,23 @@
 - 相关 pytest 或评测结果。
 - 具体业务场景描述：谁在什么流程里被什么瓶颈卡住。
 - 决策结论：为什么现有 SQLite/diagnostics/deterministic proposal 不够。
+
+## 5. Status on 2026-06-06
+
+Current evidence:
+
+- Release acceptance passes locally.
+- Runtime acceptance plan is complete.
+- Field acceptance plan provides REST smoke, MCP smoke checklist, first-use workflow, diagnostics baseline, and NAS acceptance report template.
+- No real NAS multi-worker queue pressure has been observed in this plan.
+- No repeated dashboard triage workflow has been observed in this plan.
+- No real feedback corpus showing deterministic proposal failure has been collected in this plan.
+
+Decision:
+
+- Redis Streams: **not triggered**.
+- Dashboard/subgraph: **not triggered**.
+- LLM planner: **not triggered**.
+- User manager / ACL: **not triggered**.
+
+Next review should use a real diagnostics snapshot and first-use workflow evidence, not preference or architecture aesthetics.

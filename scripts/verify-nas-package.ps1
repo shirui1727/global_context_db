@@ -25,6 +25,7 @@ try {
         "global_context_db/docker-compose.yaml",
         "global_context_db/scripts/collect-diagnostics-snapshot.ps1",
         "global_context_db/scripts/run-release-acceptance.ps1",
+        "global_context_db/scripts/run-service-smoke.ps1",
         "global_context_db/tools/media_manifest_worker.py",
         "global_context_db/tools/retrieval_eval_fixture.py"
     )
