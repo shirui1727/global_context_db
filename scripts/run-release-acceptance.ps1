@@ -108,7 +108,34 @@ if missing_ops_report_files:
     raise SystemExit(f'Missing ops-report executable-slice files: {missing_ops_report_files}')
 
 print(f'Ops report executable slice: {len(required_ops_report_files)} files present')
+
+required_roadmap_completion_files = [
+    'scripts/run-retrieval-eval-fixture-check.ps1',
+    'scripts/export-feedback-review.ps1',
+    'scripts/report-feedback-governance.ps1',
+    'scripts/report-session-recovery.ps1',
+    'scripts/report-memory-governance.ps1',
+    'scripts/check-mcp-tool-inventory.ps1',
+    'docs/asset-manifest-schema.md',
+    'docs/ops/retrieval-eval-report-template.md',
+    'docs/ops/feedback-governance-report-template.md',
+    'docs/ops/session-recovery-report-template.md',
+    'docs/ops/memory-governance-report-template.md',
+    'docs/ops/client-smoke-report-template.md',
+]
+
+missing_roadmap_completion_files = [path for path in required_roadmap_completion_files if not Path(path).exists()]
+if missing_roadmap_completion_files:
+    raise SystemExit(f'Missing roadmap-completion executable-slice files: {missing_roadmap_completion_files}')
+
+print(f'Roadmap completion executable slice: {len(required_roadmap_completion_files)} files present')
 "@
+
+    Write-Host "`n== retrieval eval fixture check =="
+    powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run-retrieval-eval-fixture-check.ps1") -OutputPath (Join-Path $OutputDir "retrieval-eval-fixture-summary.json")
+
+    Write-Host "`n== MCP inventory check =="
+    powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "check-mcp-tool-inventory.ps1")
 
     Write-Host "`n== git diff check =="
     git diff --check
