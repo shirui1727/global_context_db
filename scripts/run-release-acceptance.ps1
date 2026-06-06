@@ -73,6 +73,25 @@ if field_open_boxes:
     raise SystemExit(f'Field acceptance plan still has {len(field_open_boxes)} open checkbox(es)')
 
 print('Field acceptance plan: 7 tasks, 0 open checkboxes')
+
+required_roadmap_files = [
+    'docs/superpowers/plans/2026-06-06-long-roadmap.md',
+    'docs/releases/2026-06-06-field-acceptance.md',
+    'docs/ops/weekly-operations-report-template.md',
+    'docs/ops/smoke-data-policy.md',
+    'docs/clients/codex-mcp.md',
+    'docs/clients/openclaw-mcp.md',
+    'docs/mcp-tool-inventory.md',
+    'scripts/compare-diagnostics-snapshots.ps1',
+    'scripts/score-diagnostics-snapshot.ps1',
+    'scripts/run-first-use-smoke.ps1',
+]
+
+missing_roadmap_files = [path for path in required_roadmap_files if not Path(path).exists()]
+if missing_roadmap_files:
+    raise SystemExit(f'Missing long-roadmap executable-slice files: {missing_roadmap_files}')
+
+print(f'Long roadmap executable slice: {len(required_roadmap_files)} files present')
 "@
 
     Write-Host "`n== git diff check =="

@@ -23,9 +23,12 @@ try {
         "global_context_db/app/scheduler/service.py",
         "global_context_db/app/storage/repo.py",
         "global_context_db/docker-compose.yaml",
+        "global_context_db/scripts/compare-diagnostics-snapshots.ps1",
         "global_context_db/scripts/collect-diagnostics-snapshot.ps1",
         "global_context_db/scripts/run-release-acceptance.ps1",
+        "global_context_db/scripts/run-first-use-smoke.ps1",
         "global_context_db/scripts/run-service-smoke.ps1",
+        "global_context_db/scripts/score-diagnostics-snapshot.ps1",
         "global_context_db/tools/media_manifest_worker.py",
         "global_context_db/tools/retrieval_eval_fixture.py"
     )
