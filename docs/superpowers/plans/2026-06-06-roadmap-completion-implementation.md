@@ -122,7 +122,7 @@
 **Files:**
 - No file modifications.
 
-- [ ] **Step 1: Confirm current branch state**
+- [x] **Step 1: Confirm current branch state**
 
 Run:
 
@@ -139,7 +139,7 @@ Expected if the previous handoff is still current:
 b08ba6a chore: add ops diagnostics roadmap slice
 ```
 
-- [ ] **Step 2: Push the already-created ops report governance commit**
+- [x] **Step 2: Push the already-created ops report governance commit**
 
 Run:
 
@@ -155,7 +155,7 @@ Expected on success:
 
 If GitHub fails with connection reset or port 443 unavailable, capture the exact error, do not change proxy/AiMaMi settings, continue local work, and retry before the next publish point.
 
-- [ ] **Step 3: Verify remote head when push succeeds**
+- [x] **Step 3: Verify remote head when push succeeds**
 
 Run:
 
@@ -178,7 +178,7 @@ Expected:
 - Create: `scripts/run-retrieval-eval-fixture-check.ps1`
 - Create: `docs/ops/retrieval-eval-report-template.md`
 
-- [ ] **Step 1: Write failing tests for retrieval fixture validation**
+- [x] **Step 1: Write failing tests for retrieval fixture validation**
 
 Append these tests to `tests/test_retrieval_eval_fixture.py`:
 
@@ -232,7 +232,7 @@ def test_retrieval_eval_fixture_summary_is_bounded_and_deterministic():
     assert summary["categories"] == sorted(summary["categories"])
 ```
 
-- [ ] **Step 2: Run the focused test and verify it fails**
+- [x] **Step 2: Run the focused test and verify it fails**
 
 Run:
 
@@ -248,7 +248,7 @@ FAILED ... cannot import name 'summarize_cases'
 
 or failure for missing `validate_cases`.
 
-- [ ] **Step 3: Add validation and summary helpers**
+- [x] **Step 3: Add validation and summary helpers**
 
 Add to `tools/retrieval_eval_fixture.py` after `load_cases`:
 
@@ -297,7 +297,7 @@ def validate_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
     return {**summary, "ok": True, "errors": []}
 ```
 
-- [ ] **Step 4: Expand fixture to at least 30 cases**
+- [x] **Step 4: Expand fixture to at least 30 cases**
 
 Add these cases to `PROJECT_RETRIEVAL_EVAL_CASES`:
 
@@ -314,7 +314,7 @@ Add these cases to `PROJECT_RETRIEVAL_EVAL_CASES`:
     {"query": "dashboard trigger review diagnostics too slow evidence", "expected_domain": "document", "metadata": {"category": "dashboard_trigger"}},
 ```
 
-- [ ] **Step 5: Add the fixture check script**
+- [x] **Step 5: Add the fixture check script**
 
 Create `scripts/run-retrieval-eval-fixture-check.ps1`:
 
@@ -344,7 +344,7 @@ finally {
 }
 ```
 
-- [ ] **Step 6: Add retrieval eval report template**
+- [x] **Step 6: Add retrieval eval report template**
 
 Create `docs/ops/retrieval-eval-report-template.md`:
 
@@ -381,7 +381,7 @@ Create `docs/ops/retrieval-eval-report-template.md`:
 Do not add a blocking release gate until repeated eval runs show stable data and failures are actionable.
 ```
 
-- [ ] **Step 7: Verify retrieval eval slice**
+- [x] **Step 7: Verify retrieval eval slice**
 
 Run:
 
@@ -397,7 +397,7 @@ passed
 "ok": true
 ```
 
-- [ ] **Step 8: Commit retrieval eval slice**
+- [x] **Step 8: Commit retrieval eval slice**
 
 Run:
 
@@ -417,7 +417,7 @@ git commit -m "chore: add retrieval eval governance slice"
 - Create: `scripts/report-feedback-governance.ps1`
 - Create: `docs/ops/feedback-governance-report-template.md`
 
-- [ ] **Step 1: Write failing test for feedback governance summary**
+- [x] **Step 1: Write failing test for feedback governance summary**
 
 Append to `tests/test_memory_feedback.py`:
 
@@ -445,7 +445,7 @@ def test_feedback_governance_summary_counts_statuses_and_planner_mode(feedback_e
     assert summary["llm_used"] is False
 ```
 
-- [ ] **Step 2: Run focused test and verify it fails**
+- [x] **Step 2: Run focused test and verify it fails**
 
 Run:
 
@@ -459,7 +459,7 @@ Expected:
 FAILED ... cannot import name 'summarize_memory_feedback_governance'
 ```
 
-- [ ] **Step 3: Implement read-only governance summary helper**
+- [x] **Step 3: Implement read-only governance summary helper**
 
 Add to `app/memory/feedback_service.py`:
 
@@ -498,7 +498,7 @@ def summarize_memory_feedback_governance(limit: int = 100) -> dict[str, Any]:
     }
 ```
 
-- [ ] **Step 4: Create feedback export script**
+- [x] **Step 4: Create feedback export script**
 
 Create `scripts/export-feedback-review.ps1`:
 
@@ -539,7 +539,7 @@ $Payload | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $OutputPath -Enco
 Get-Item $OutputPath | Select-Object FullName, Length, LastWriteTime
 ```
 
-- [ ] **Step 5: Create feedback governance report script**
+- [x] **Step 5: Create feedback governance report script**
 
 Create `scripts/report-feedback-governance.ps1`:
 
@@ -592,7 +592,7 @@ $Lines | Set-Content -LiteralPath $OutputPath -Encoding UTF8
 Get-Item $OutputPath | Select-Object FullName, Length, LastWriteTime
 ```
 
-- [ ] **Step 6: Add report template**
+- [x] **Step 6: Add report template**
 
 Create `docs/ops/feedback-governance-report-template.md`:
 
@@ -628,7 +628,7 @@ Create `docs/ops/feedback-governance-report-template.md`:
 - [ ] Start LLM planner design only after sample corpus proves deterministic review cost is too high.
 ```
 
-- [ ] **Step 7: Verify feedback governance slice**
+- [x] **Step 7: Verify feedback governance slice**
 
 Run:
 
@@ -644,7 +644,7 @@ passed
 compile success
 ```
 
-- [ ] **Step 8: Commit feedback governance slice**
+- [x] **Step 8: Commit feedback governance slice**
 
 Run:
 
@@ -663,7 +663,7 @@ git commit -m "chore: add feedback governance reporting slice"
 - Create: `docs/asset-manifest-schema.md`
 - Modify: `docs/external-worker-contract.md`
 
-- [ ] **Step 1: Write failing tests for manifest version fields**
+- [x] **Step 1: Write failing tests for manifest version fields**
 
 Append to `tests/test_media_manifest_worker.py`:
 
@@ -697,7 +697,7 @@ def test_analysis_manifest_includes_manifest_version(tmp_path: Path):
     assert manifest["payload"]["metadata"]["worker_contract"] == "external-worker/v1"
 ```
 
-- [ ] **Step 2: Run focused media tests and verify failure**
+- [x] **Step 2: Run focused media tests and verify failure**
 
 Run:
 
@@ -711,7 +711,7 @@ Expected:
 FAILED ... KeyError: 'manifest_version'
 ```
 
-- [ ] **Step 3: Add version constants and metadata fields**
+- [x] **Step 3: Add version constants and metadata fields**
 
 Add near the top of `tools/media_manifest_worker.py`:
 
@@ -756,7 +756,7 @@ Update `build_analysis_manifest` payload metadata:
 },
 ```
 
-- [ ] **Step 4: Add schema doc**
+- [x] **Step 4: Add schema doc**
 
 Create `docs/asset-manifest-schema.md`:
 
@@ -779,7 +779,7 @@ Global Context DB registers asset references, scan results, and derived artifact
 Artifacts may include derived text, probe JSON, thumbnails, OCR, ASR, or keyframe references. Original NAS files remain external and must not be copied into `global_context_db/data` or the SQLite database.
 ```
 
-- [ ] **Step 5: Update external worker contract doc**
+- [x] **Step 5: Update external worker contract doc**
 
 Add to `docs/external-worker-contract.md`:
 
@@ -796,7 +796,7 @@ Workers must write versioned payload metadata:
 The schema reference is `docs/asset-manifest-schema.md`. Version fields are operational metadata; they do not authorize copying original NAS files into Global Context DB storage.
 ```
 
-- [ ] **Step 6: Verify asset manifest slice**
+- [x] **Step 6: Verify asset manifest slice**
 
 Run:
 
@@ -812,7 +812,7 @@ passed
 compile success
 ```
 
-- [ ] **Step 7: Commit asset manifest slice**
+- [x] **Step 7: Commit asset manifest slice**
 
 Run:
 
@@ -829,7 +829,7 @@ git commit -m "chore: version asset manifest worker payloads"
 - Create: `scripts/report-session-recovery.ps1`
 - Create: `docs/ops/session-recovery-report-template.md`
 
-- [ ] **Step 1: Create session recovery report script**
+- [x] **Step 1: Create session recovery report script**
 
 Create `scripts/report-session-recovery.ps1`:
 
@@ -879,7 +879,7 @@ $Lines | Set-Content -LiteralPath $OutputPath -Encoding UTF8
 Get-Item $OutputPath | Select-Object FullName, Length, LastWriteTime
 ```
 
-- [ ] **Step 2: Add session recovery template**
+- [x] **Step 2: Add session recovery template**
 
 Create `docs/ops/session-recovery-report-template.md`:
 
@@ -910,7 +910,7 @@ Create `docs/ops/session-recovery-report-template.md`:
 A session is recoverable when `resume-context` gives enough current focus, recent events, open tasks, and relevant memory/document/asset links for a new agent to continue without asking the user to restate the work.
 ```
 
-- [ ] **Step 3: Verify script with bounded sample**
+- [x] **Step 3: Verify script with bounded sample**
 
 Run:
 
@@ -933,7 +933,7 @@ Expected:
 FullName ... gcd-session-recovery-sample.md
 ```
 
-- [ ] **Step 4: Commit session recovery slice**
+- [x] **Step 4: Commit session recovery slice**
 
 Run:
 
@@ -950,7 +950,7 @@ git commit -m "chore: add session recovery reporting slice"
 - Create: `scripts/report-memory-governance.ps1`
 - Create: `docs/ops/memory-governance-report-template.md`
 
-- [ ] **Step 1: Create memory governance report script**
+- [x] **Step 1: Create memory governance report script**
 
 Create `scripts/report-memory-governance.ps1`:
 
@@ -991,7 +991,7 @@ $Lines | Set-Content -LiteralPath $OutputPath -Encoding UTF8
 Get-Item $OutputPath | Select-Object FullName, Length, LastWriteTime
 ```
 
-- [ ] **Step 2: Add governance template**
+- [x] **Step 2: Add governance template**
 
 Create `docs/ops/memory-governance-report-template.md`:
 
@@ -1026,7 +1026,7 @@ Create `docs/ops/memory-governance-report-template.md`:
 - [ ] Never auto-apply hygiene without human review.
 ```
 
-- [ ] **Step 3: Verify script against diagnostics sample**
+- [x] **Step 3: Verify script against diagnostics sample**
 
 Run with an existing snapshot `diagnostics.json`:
 
@@ -1040,7 +1040,7 @@ Expected:
 FullName ... diagnostics.memory-governance.md
 ```
 
-- [ ] **Step 4: Commit memory governance slice**
+- [x] **Step 4: Commit memory governance slice**
 
 Run:
 
@@ -1060,7 +1060,7 @@ git commit -m "chore: add memory governance reporting slice"
 - Create: `scripts/check-mcp-tool-inventory.ps1`
 - Create: `docs/ops/client-smoke-report-template.md`
 
-- [ ] **Step 1: Create inventory check script**
+- [x] **Step 1: Create inventory check script**
 
 Create `scripts/check-mcp-tool-inventory.ps1`:
 
@@ -1097,7 +1097,7 @@ if ($Missing.Count -gt 0) {
 }
 ```
 
-- [ ] **Step 2: Update MCP inventory with risk grouping**
+- [x] **Step 2: Update MCP inventory with risk grouping**
 
 Ensure `docs/mcp-tool-inventory.md` contains:
 
@@ -1120,7 +1120,7 @@ Ensure `docs/mcp-tool-inventory.md` contains:
 
 Keep the existing documented tools; do not remove working inventory content.
 
-- [ ] **Step 3: Update client docs**
+- [x] **Step 3: Update client docs**
 
 Add to both `docs/clients/codex-mcp.md` and `docs/clients/openclaw-mcp.md`:
 
@@ -1134,7 +1134,7 @@ Add to both `docs/clients/codex-mcp.md` and `docs/clients/openclaw-mcp.md`:
 5. Do not paste API keys, local secrets, or private raw content into smoke reports.
 ```
 
-- [ ] **Step 4: Add client smoke report template**
+- [x] **Step 4: Add client smoke report template**
 
 Create `docs/ops/client-smoke-report-template.md`:
 
@@ -1163,7 +1163,7 @@ Create `docs/ops/client-smoke-report-template.md`:
 - [ ] Smoke data is tagged and bounded.
 ```
 
-- [ ] **Step 5: Verify MCP inventory slice**
+- [x] **Step 5: Verify MCP inventory slice**
 
 Run:
 
@@ -1177,7 +1177,7 @@ Expected:
 Ok : True
 ```
 
-- [ ] **Step 6: Commit MCP client slice**
+- [x] **Step 6: Commit MCP client slice**
 
 Run:
 
@@ -1195,7 +1195,7 @@ git commit -m "docs: harden MCP client smoke guidance"
 - Modify: `scripts/verify-nas-package.ps1`
 - Modify: `scripts/run-release-acceptance.ps1`
 
-- [ ] **Step 1: Add required package entries**
+- [x] **Step 1: Add required package entries**
 
 In both `scripts/package-nas-update.ps1` and `scripts/verify-nas-package.ps1`, add:
 
@@ -1214,7 +1214,7 @@ In both `scripts/package-nas-update.ps1` and `scripts/verify-nas-package.ps1`, a
 "global_context_db/docs/ops/client-smoke-report-template.md",
 ```
 
-- [ ] **Step 2: Add release acceptance sanity checks**
+- [x] **Step 2: Add release acceptance sanity checks**
 
 In `scripts/run-release-acceptance.ps1`, extend the Python plan sanity block with:
 
@@ -1239,7 +1239,7 @@ if missing_roadmap_completion_files:
 print(f'Roadmap completion executable slice: {len(required_roadmap_completion_files)} files present')
 ```
 
-- [ ] **Step 3: Add script-level acceptance calls**
+- [x] **Step 3: Add script-level acceptance calls**
 
 In `scripts/run-release-acceptance.ps1`, before `git diff --check`, add:
 
@@ -1251,7 +1251,7 @@ Write-Host "`n== MCP inventory check =="
 powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "check-mcp-tool-inventory.ps1")
 ```
 
-- [ ] **Step 4: Verify package scripts**
+- [x] **Step 4: Verify package scripts**
 
 Run:
 
@@ -1266,7 +1266,7 @@ Expected:
 Ok : True
 ```
 
-- [ ] **Step 5: Commit acceptance wiring**
+- [x] **Step 5: Commit acceptance wiring**
 
 Run:
 
@@ -1284,7 +1284,7 @@ git commit -m "chore: gate roadmap completion artifacts"
 - Modify: `docs/superpowers/plans/2026-06-06-long-roadmap.md`
 - Modify: `docs/superpowers/plans/2026-06-06-roadmap-completion-implementation.md` by checking completed boxes if implemented manually.
 
-- [ ] **Step 1: Run full release acceptance**
+- [x] **Step 1: Run full release acceptance**
 
 Run:
 
@@ -1302,7 +1302,7 @@ Roadmap completion executable slice: 12 files present
 acceptance passed
 ```
 
-- [ ] **Step 2: Create release record**
+- [x] **Step 2: Create release record**
 
 Create `docs/releases/2026-06-06-roadmap-completion.md`:
 
@@ -1340,7 +1340,7 @@ Create `docs/releases/2026-06-06-roadmap-completion.md`:
 - git diff check:
 ```
 
-- [ ] **Step 3: Update roadmap completion status**
+- [x] **Step 3: Update roadmap completion status**
 
 Append to `docs/superpowers/plans/2026-06-06-long-roadmap.md`:
 
@@ -1360,7 +1360,7 @@ This slice completes the current no-heavy-dependency roadmap pass by adding:
 Redis, dashboard/subgraph, LLM planner, and ACL remain untriggered until evidence records justify them.
 ```
 
-- [ ] **Step 4: Verify docs and final diff**
+- [x] **Step 4: Verify docs and final diff**
 
 Run:
 
@@ -1375,7 +1375,7 @@ Expected:
 no diff --check output
 ```
 
-- [ ] **Step 5: Commit release record**
+- [x] **Step 5: Commit release record**
 
 Run:
 
@@ -1391,7 +1391,7 @@ git commit -m "docs: add roadmap completion release plan"
 **Files:**
 - No file modifications.
 
-- [ ] **Step 1: Push all completed commits**
+- [x] **Step 1: Push all completed commits**
 
 Run:
 
@@ -1407,7 +1407,7 @@ Expected:
 
 If the push fails due to GitHub network issues, capture the exact error and retry later. Do not modify AiMaMi/proxy settings.
 
-- [ ] **Step 2: Verify remote matches local**
+- [x] **Step 2: Verify remote matches local**
 
 Run:
 
@@ -1426,7 +1426,7 @@ local=<same-sha>
 remote=<same-sha>
 ```
 
-- [ ] **Step 3: Final clean status**
+- [x] **Step 3: Final clean status**
 
 Run:
 
