@@ -1,0 +1,36 @@
+{
+  "case_count": 30,
+  "domains": [
+    "asset",
+    "document",
+    "memory",
+    "session"
+  ],
+  "categories": [
+    "asset_cubes",
+    "asset_governance",
+    "asset_manifest",
+    "asset_scan",
+    "capture",
+    "client_ecosystem",
+    "cubes",
+    "dashboard_trigger",
+    "diagnostics",
+    "document",
+    "feedback",
+    "hooks",
+    "hygiene",
+    "memory_lifecycle",
+    "promotion",
+    "quality",
+    "reader",
+    "relations",
+    "release",
+    "retrieval_eval",
+    "scheduler",
+    "session",
+    "session_recovery"
+  ],
+  "ok": true,
+  "errors": []
+}
