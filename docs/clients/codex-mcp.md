@@ -35,6 +35,14 @@ smoke-test
 mcp-smoke
 ```
 
+## Smoke order
+
+1. Call `gcd_diagnostics`.
+2. Call `gcd_scheduler_status`.
+3. Run one read-only search.
+4. Only then test a high-risk write tool against smoke-tagged data.
+5. Do not paste API keys, local secrets, or private raw content into smoke reports.
+
 ## High-risk tools
 
 The following should be used deliberately and reviewed through audit logs:

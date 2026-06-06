@@ -46,6 +46,14 @@ global_context_db -> http://NAS_IP:8001/mcp
 - `gcd_add_memory`
 - `gcd_search_memories`
 
+## Smoke order
+
+1. Call `gcd_diagnostics`.
+2. Call `gcd_scheduler_status`.
+3. Run one read-only search.
+4. Only then test a high-risk write tool against smoke-tagged data.
+5. Do not paste API keys, local secrets, or private raw content into smoke reports.
+
 ## Troubleshooting `fetch failed`
 
 Check in order:

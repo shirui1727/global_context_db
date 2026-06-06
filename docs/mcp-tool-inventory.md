@@ -2,6 +2,21 @@
 
 This inventory groups important MCP tools by risk and operational purpose. It is not a complete API reference; use it for smoke testing and governance.
 
+## Read-only diagnostics tools
+
+- `gcd_diagnostics`
+- `gcd_scheduler_status`
+
+## Read/search tools
+
+- `gcd_search_memories`
+- `gcd_search_assets`
+
+## High-risk write tools
+
+- `gcd_add_memory`
+- `gcd_propose_memory_feedback_actions`
+
 ## Read-only / low-risk
 
 - `gcd_health`
