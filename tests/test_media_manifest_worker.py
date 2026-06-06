@@ -203,3 +203,32 @@ def test_cli_post_url_can_submit_analysis_manifest(tmp_path: Path, capsys):
     assert captured["path"] == "/assets/asset-1/analysis-manifest"
     assert captured["api_key"] == "secret"
     assert '"accepted": true' in out
+
+
+def test_scan_item_includes_manifest_version(tmp_path: Path):
+    source = tmp_path / "image.png"
+    source.write_bytes(b"fake image")
+
+    item = build_scan_item(source, uri_prefix="smb://NAS/images", root=tmp_path)
+
+    assert item["metadata"]["manifest_version"] == "asset-manifest/v1"
+    assert item["metadata"]["worker_contract"] == "external-worker/v1"
+
+
+def test_scan_run_includes_manifest_version(tmp_path: Path):
+    (tmp_path / "brief.md").write_text("brief", encoding="utf-8")
+
+    payload = build_scan_run(tmp_path, scope_prefix="smb://NAS/library")
+
+    assert payload["metadata"]["manifest_version"] == "asset-scan-run/v1"
+    assert payload["metadata"]["worker_contract"] == "external-worker/v1"
+
+
+def test_analysis_manifest_includes_manifest_version(tmp_path: Path):
+    source = tmp_path / "brief.md"
+    source.write_text("brief", encoding="utf-8")
+
+    manifest = build_analysis_manifest(source, "asset-1", "/data/artifacts", tmp_path / "artifacts")
+
+    assert manifest["payload"]["metadata"]["manifest_version"] == "asset-analysis-manifest/v1"
+    assert manifest["payload"]["metadata"]["worker_contract"] == "external-worker/v1"

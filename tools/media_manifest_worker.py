@@ -17,6 +17,10 @@ DOCUMENT_EXTENSIONS = {".txt", ".md", ".markdown", ".pdf", ".docx", ".doc", ".rt
 TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".html", ".htm", ".rtf"}
 SUPPORTED_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | DOCUMENT_EXTENSIONS
 SKIP_DIRS = {"__pycache__", ".git", "node_modules", "dist", "release", "data", ".venv", "venv"}
+SCAN_ITEM_MANIFEST_VERSION = "asset-manifest/v1"
+SCAN_RUN_MANIFEST_VERSION = "asset-scan-run/v1"
+ANALYSIS_MANIFEST_VERSION = "asset-analysis-manifest/v1"
+WORKER_CONTRACT_VERSION = "external-worker/v1"
 
 
 def infer_asset_kind(path: Path) -> str:
@@ -57,7 +61,12 @@ def build_scan_item(path: Path, uri_prefix: str, root: Path | None = None) -> di
         "summary": "",
         "tags": [asset_kind],
         "trust_level": "unverified",
-        "metadata": {"source_path": str(path), "relative_path": relative},
+        "metadata": {
+            "source_path": str(path),
+            "relative_path": relative,
+            "manifest_version": SCAN_ITEM_MANIFEST_VERSION,
+            "worker_contract": WORKER_CONTRACT_VERSION,
+        },
     }
 
 
@@ -82,6 +91,8 @@ def build_scan_run(
             "source_root": str(root),
             "generated_by": created_by,
             "observed_count": len(observed),
+            "manifest_version": SCAN_RUN_MANIFEST_VERSION,
+            "worker_contract": WORKER_CONTRACT_VERSION,
         },
     }
 
@@ -198,7 +209,12 @@ def build_analysis_manifest(
             "tags": [asset_kind],
             "generated_by": generated_by,
             "artifacts": artifacts,
-            "metadata": {"source_path": str(path), "asset_kind": asset_kind},
+            "metadata": {
+                "source_path": str(path),
+                "asset_kind": asset_kind,
+                "manifest_version": ANALYSIS_MANIFEST_VERSION,
+                "worker_contract": WORKER_CONTRACT_VERSION,
+            },
         },
     }
 

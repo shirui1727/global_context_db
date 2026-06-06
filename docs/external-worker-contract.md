@@ -48,3 +48,14 @@ Recommended top-level fields:
 ```
 
 Older manifests without `manifest_version` should remain accepted until a migration plan exists.
+
+## Manifest versions
+
+Workers must write versioned payload metadata:
+
+- Scan item: `metadata.manifest_version = asset-manifest/v1`
+- Scan run: `metadata.manifest_version = asset-scan-run/v1`
+- Analysis manifest: `payload.metadata.manifest_version = asset-analysis-manifest/v1`
+- Worker contract: `external-worker/v1`
+
+The schema reference is `docs/asset-manifest-schema.md`. Version fields are operational metadata; they do not authorize copying original NAS files into Global Context DB storage.
