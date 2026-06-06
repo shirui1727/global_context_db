@@ -92,6 +92,22 @@ if missing_roadmap_files:
     raise SystemExit(f'Missing long-roadmap executable-slice files: {missing_roadmap_files}')
 
 print(f'Long roadmap executable slice: {len(required_roadmap_files)} files present')
+
+required_ops_report_files = [
+    'scripts/generate-ops-report.ps1',
+    'scripts/report-queue-pressure.ps1',
+    'docs/ops/dashboard-trigger-review.md',
+    'docs/ops/feedback-sample-log.md',
+    'docs/asset-artifact-policy.md',
+    'docs/external-worker-contract.md',
+    'docs/session-compression-policy.md',
+]
+
+missing_ops_report_files = [path for path in required_ops_report_files if not Path(path).exists()]
+if missing_ops_report_files:
+    raise SystemExit(f'Missing ops-report executable-slice files: {missing_ops_report_files}')
+
+print(f'Ops report executable slice: {len(required_ops_report_files)} files present')
 "@
 
     Write-Host "`n== git diff check =="

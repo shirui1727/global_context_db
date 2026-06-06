@@ -97,6 +97,8 @@ try {
         "global_context_db/docker-compose.yaml",
         "global_context_db/scripts/compare-diagnostics-snapshots.ps1",
         "global_context_db/scripts/collect-diagnostics-snapshot.ps1",
+        "global_context_db/scripts/generate-ops-report.ps1",
+        "global_context_db/scripts/report-queue-pressure.ps1",
         "global_context_db/scripts/run-release-acceptance.ps1",
         "global_context_db/scripts/run-first-use-smoke.ps1",
         "global_context_db/scripts/run-service-smoke.ps1",
