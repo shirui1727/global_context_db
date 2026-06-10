@@ -34,9 +34,9 @@ GCD will:
 - expose diagnostics;
 - keep heavy processing out of the core service.
 
-## Manifest expectations
+## Legacy manifest expectations
 
-Recommended top-level fields:
+Older generic manifests used top-level fields like this:
 
 ```json
 {
@@ -47,7 +47,7 @@ Recommended top-level fields:
 }
 ```
 
-Older manifests without `manifest_version` should remain accepted until a migration plan exists.
+Older manifests without `manifest_version`, or with the legacy generic `1.0` marker, should remain accepted until a migration plan exists. New worker payloads should use the versioned metadata fields below.
 
 ## Manifest versions
 
